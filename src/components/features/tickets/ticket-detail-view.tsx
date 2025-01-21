@@ -16,7 +16,9 @@ type SenderType = Database['public']['Enums']['sender_type']
 type TicketWithRelations = Database['public']['Tables']['tickets']['Row'] & {
   customer: Database['public']['Tables']['customers']['Row']
   assigned_agent: Database['public']['Tables']['agent_profiles']['Row'] | null
-  messages: Array<Database['public']['Tables']['ticket_messages']['Row']>
+  messages: Array<Database['public']['Tables']['ticket_messages']['Row'] & {
+    sender: Database['public']['Tables']['agent_profiles']['Row'] | null
+  }>
 }
 
 interface TicketDetailViewProps {
@@ -33,10 +35,23 @@ export function TicketDetailView({ ticketId, onBack }: TicketDetailViewProps) {
   const [reply, setReply] = useState("")
   const [isMacroModalOpen, setIsMacroModalOpen] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [agents, setAgents] = useState<Array<Database['public']['Tables']['agent_profiles']['Row']>>([])
 
   useEffect(() => {
     fetchTicket()
+    fetchAgents()
   }, [ticketId])
+
+  const fetchAgents = async () => {
+    try {
+      const response = await fetch('/api/agents')
+      if (!response.ok) throw new Error('Failed to fetch agents')
+      const data = await response.json()
+      setAgents(data)
+    } catch (error) {
+      console.error('Error fetching agents:', error)
+    }
+  }
 
   const fetchTicket = async () => {
     try {
@@ -137,6 +152,11 @@ export function TicketDetailView({ ticketId, onBack }: TicketDetailViewProps) {
     setReply((prev) => prev + (prev ? "\n\n" : "") + content)
   }
 
+  // Sort messages by creation date
+  const sortedMessages = ticket?.messages.sort((a, b) => {
+    return new Date(a.created_at!).getTime() - new Date(b.created_at!).getTime()
+  }) || []
+
   if (isLoading) {
     return (
       <div className="p-8">
@@ -230,8 +250,11 @@ export function TicketDetailView({ ticketId, onBack }: TicketDetailViewProps) {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="unassigned">Unassigned</SelectItem>
-                  <SelectItem value="alice">Alice</SelectItem>
-                  <SelectItem value="bob">Bob</SelectItem>
+                  {agents.map((agent) => (
+                    <SelectItem key={agent.id} value={agent.id}>
+                      {agent.name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -250,7 +273,7 @@ export function TicketDetailView({ ticketId, onBack }: TicketDetailViewProps) {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {ticket.messages.map((message) => (
+            {sortedMessages.map((message) => (
               <div
                 key={message.id}
                 className={`p-4 rounded-lg ${
@@ -262,7 +285,7 @@ export function TicketDetailView({ ticketId, onBack }: TicketDetailViewProps) {
                 <div className="flex justify-between items-center mb-2">
                   <span className="font-semibold">
                     {message.sender_type === 'customer' ? ticket.customer.name : 
-                     message.sender_type === 'agent' ? ticket.assigned_agent?.name || 'Agent' : 
+                     message.sender_type === 'agent' ? message.sender?.name || 'Agent' : 
                      'System'}
                   </span>
                   <span className="text-sm text-muted-foreground">
