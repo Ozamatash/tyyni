@@ -1,88 +1,22 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { ArrowLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { InsertMacroModal } from "@/components/modals/insert-macro-modal"
+import { Database } from "@/types/supabase"
 
-interface Message {
-  id: number
-  sender: string
-  timestamp: string
-  content: string
-  isInternal: boolean
-}
+type TicketStatus = Database['public']['Enums']['ticket_status']
+type TicketPriority = Database['public']['Enums']['ticket_priority']
+type SenderType = Database['public']['Enums']['sender_type']
 
-interface Ticket {
-  id: string
-  subject: string
-  requesterName: string
-  requesterEmail: string
-  status: string
-  priority: string
-  assignedTo: string
-  conversation: Message[]
-}
-
-type TicketsData = {
-  [key: string]: Ticket
-}
-
-// Dummy data for the tickets
-const tickets: TicketsData = {
-  "T-1001": {
-    id: "T-1001",
-    subject: "Cannot access account",
-    requesterName: "John Doe",
-    requesterEmail: "john@example.com",
-    status: "Open",
-    priority: "High",
-    assignedTo: "Alice",
-    conversation: [
-      {
-        id: 1,
-        sender: "John Doe",
-        timestamp: "2023-04-01T10:00:00Z",
-        content: "I cannot log into my account. It says password is incorrect, but I'm sure it's right.",
-        isInternal: false,
-      },
-      {
-        id: 2,
-        sender: "Alice",
-        timestamp: "2023-04-01T10:30:00Z",
-        content: "I've reset your password. Please check email for the new temporary",
-        isInternal: false,
-      },
-      {
-        id: 3,
-        sender: "Alice",
-        timestamp: "2023-04-01T10:31:00Z",
-        content: "Remember to follow up in 24 hours if the customer hasn't logged in.",
-        isInternal: true,
-      },
-    ],
-  },
-  "T-1002": {
-    id: "T-1002",
-    subject: "Feature request",
-    requesterName: "Sarah Smith",
-    requesterEmail: "sarah@example.com",
-    status: "Pending",
-    priority: "Normal",
-    assignedTo: "Bob",
-    conversation: [
-      {
-        id: 1,
-        sender: "Sarah Smith",
-        timestamp: "2023-04-02T14:30:00Z",
-        content: "Would it be possible to add dark mode to the application?",
-        isInternal: false,
-      },
-    ],
-  },
+type TicketWithRelations = Database['public']['Tables']['tickets']['Row'] & {
+  customer: Database['public']['Tables']['customers']['Row']
+  assigned_agent: Database['public']['Tables']['agent_profiles']['Row'] | null
+  messages: Array<Database['public']['Tables']['ticket_messages']['Row']>
 }
 
 interface TicketDetailViewProps {
@@ -91,27 +25,132 @@ interface TicketDetailViewProps {
 }
 
 export function TicketDetailView({ ticketId, onBack }: TicketDetailViewProps) {
-  const ticket = tickets[ticketId]
-  const [status, setStatus] = useState(ticket?.status || "")
-  const [priority, setPriority] = useState(ticket?.priority || "")
-  const [assignedTo, setAssignedTo] = useState(ticket?.assignedTo || "")
+  const [ticket, setTicket] = useState<TicketWithRelations | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [status, setStatus] = useState<TicketStatus>('open')
+  const [priority, setPriority] = useState<TicketPriority>('normal')
+  const [assignedTo, setAssignedTo] = useState<string | null>(null)
   const [reply, setReply] = useState("")
   const [isMacroModalOpen, setIsMacroModalOpen] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
 
-  const handleSendReply = () => {
-    // TODO: Implement send reply logic
-    console.log("Sending reply:", reply)
-    setReply("")
+  useEffect(() => {
+    fetchTicket()
+  }, [ticketId])
+
+  const fetchTicket = async () => {
+    try {
+      setIsLoading(true)
+      const response = await fetch(`/api/tickets/${ticketId}`)
+      if (!response.ok) throw new Error('Failed to fetch ticket')
+      const data = await response.json()
+      setTicket(data)
+      setStatus(data.status)
+      setPriority(data.priority)
+      setAssignedTo(data.assigned_to)
+    } catch (error) {
+      console.error('Error fetching ticket:', error)
+    } finally {
+      setIsLoading(false)
+    }
   }
 
-  const handleAddInternalNote = () => {
-    // TODO: Implement add internal note logic
-    console.log("Adding internal note:", reply)
-    setReply("")
+  const handleUpdateTicket = async () => {
+    if (!ticket) return
+
+    setIsSaving(true)
+    try {
+      const response = await fetch(`/api/tickets/${ticketId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          status,
+          priority,
+          assigned_to: assignedTo,
+        }),
+      })
+
+      if (!response.ok) throw new Error('Failed to update ticket')
+      await fetchTicket()
+    } catch (error) {
+      console.error('Error updating ticket:', error)
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleSendReply = async () => {
+    if (!ticket || !reply.trim()) return
+
+    setIsSaving(true)
+    try {
+      const response = await fetch(`/api/tickets/${ticketId}/messages`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          body: reply,
+          is_internal: false,
+        }),
+      })
+
+      if (!response.ok) throw new Error('Failed to send reply')
+      setReply("")
+      await fetchTicket()
+    } catch (error) {
+      console.error('Error sending reply:', error)
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleAddInternalNote = async () => {
+    if (!ticket || !reply.trim()) return
+
+    setIsSaving(true)
+    try {
+      const response = await fetch(`/api/tickets/${ticketId}/messages`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          body: reply,
+          is_internal: true,
+        }),
+      })
+
+      if (!response.ok) throw new Error('Failed to add internal note')
+      setReply("")
+      await fetchTicket()
+    } catch (error) {
+      console.error('Error adding internal note:', error)
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   const handleInsertMacro = (content: string) => {
     setReply((prev) => prev + (prev ? "\n\n" : "") + content)
+  }
+
+  if (isLoading) {
+    return (
+      <div className="p-8">
+        <Button variant="ghost" onClick={onBack} className="flex items-center mb-4">
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Back to List
+        </Button>
+        <Card>
+          <CardContent className="p-8">
+            <p className="text-center text-muted-foreground">Loading ticket...</p>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   if (!ticket) {
@@ -149,50 +188,58 @@ export function TicketDetailView({ ticketId, onBack }: TicketDetailViewProps) {
             <div>
               <p className="font-semibold">Requester:</p>
               <p>
-                {ticket.requesterName} ({ticket.requesterEmail})
+                {ticket.customer.name} ({ticket.customer.email})
               </p>
             </div>
             <div>
               <p className="font-semibold">Status:</p>
-              <Select value={status} onValueChange={setStatus}>
+              <Select value={status} onValueChange={(value: TicketStatus) => setStatus(value)}>
                 <SelectTrigger className="w-[200px]">
                   <SelectValue placeholder="Select status" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Open">Open</SelectItem>
-                  <SelectItem value="Pending">Pending</SelectItem>
-                  <SelectItem value="Solved">Solved</SelectItem>
+                  <SelectItem value="open">Open</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="solved">Solved</SelectItem>
+                  <SelectItem value="closed">Closed</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div>
               <p className="font-semibold">Priority:</p>
-              <Select value={priority} onValueChange={setPriority}>
+              <Select value={priority} onValueChange={(value: TicketPriority) => setPriority(value)}>
                 <SelectTrigger className="w-[200px]">
                   <SelectValue placeholder="Select priority" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Low">Low</SelectItem>
-                  <SelectItem value="Normal">Normal</SelectItem>
-                  <SelectItem value="High">High</SelectItem>
-                  <SelectItem value="Urgent">Urgent</SelectItem>
+                  <SelectItem value="low">Low</SelectItem>
+                  <SelectItem value="normal">Normal</SelectItem>
+                  <SelectItem value="high">High</SelectItem>
+                  <SelectItem value="urgent">Urgent</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div>
               <p className="font-semibold">Assigned To:</p>
-              <Select value={assignedTo} onValueChange={setAssignedTo}>
+              <Select 
+                value={assignedTo || 'unassigned'} 
+                onValueChange={(value) => setAssignedTo(value === 'unassigned' ? null : value)}
+              >
                 <SelectTrigger className="w-[200px]">
                   <SelectValue placeholder="Select agent" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Unassigned">Unassigned</SelectItem>
-                  <SelectItem value="Alice">Alice</SelectItem>
-                  <SelectItem value="Bob">Bob</SelectItem>
-                  {/* Add more agents as needed */}
+                  <SelectItem value="unassigned">Unassigned</SelectItem>
+                  <SelectItem value="alice">Alice</SelectItem>
+                  <SelectItem value="bob">Bob</SelectItem>
                 </SelectContent>
               </Select>
             </div>
+          </div>
+          <div className="mt-4 flex justify-end">
+            <Button onClick={handleUpdateTicket} disabled={isSaving}>
+              {isSaving ? 'Saving...' : 'Save Changes'}
+            </Button>
           </div>
         </CardContent>
       </Card>
@@ -203,22 +250,26 @@ export function TicketDetailView({ ticketId, onBack }: TicketDetailViewProps) {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {ticket.conversation.map((message) => (
+            {ticket.messages.map((message) => (
               <div
                 key={message.id}
                 className={`p-4 rounded-lg ${
-                  message.isInternal 
+                  message.is_internal 
                     ? "bg-yellow-100 dark:bg-yellow-900/20" 
                     : "bg-stone-100 dark:bg-stone-800"
                 }`}
               >
                 <div className="flex justify-between items-center mb-2">
-                  <span className="font-semibold">{message.sender}</span>
+                  <span className="font-semibold">
+                    {message.sender_type === 'customer' ? ticket.customer.name : 
+                     message.sender_type === 'agent' ? ticket.assigned_agent?.name || 'Agent' : 
+                     'System'}
+                  </span>
                   <span className="text-sm text-muted-foreground">
-                    {new Date(message.timestamp).toLocaleString()}
+                    {new Date(message.created_at!).toLocaleString()}
                   </span>
                 </div>
-                <p>{message.content}</p>
+                <p>{message.body}</p>
               </div>
             ))}
           </div>
@@ -241,11 +292,13 @@ export function TicketDetailView({ ticketId, onBack }: TicketDetailViewProps) {
               <Button onClick={() => setIsMacroModalOpen(true)} className="mr-2">
                 Insert Macro
               </Button>
-              <Button onClick={handleAddInternalNote} variant="outline">
+              <Button onClick={handleAddInternalNote} variant="outline" disabled={isSaving}>
                 Add Internal Note
               </Button>
             </div>
-            <Button onClick={handleSendReply}>Send Reply</Button>
+            <Button onClick={handleSendReply} disabled={isSaving}>
+              {isSaving ? 'Sending...' : 'Send Reply'}
+            </Button>
           </div>
         </CardContent>
       </Card>

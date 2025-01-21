@@ -1,5 +1,5 @@
 # Database Schema Documentation
-
+# Last updated 2025.01.22 could be depreceated
 ## Overview
 
 This document explains the database schema for our multi-tenant customer support platform. The schema is designed to support multiple organizations (tenants) while maintaining data isolation and security.

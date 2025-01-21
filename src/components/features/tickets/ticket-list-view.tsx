@@ -1,46 +1,87 @@
-import { useState } from "react"
+"use client"
+
+import { useState, useEffect } from "react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { CreateTicketModal } from "@/components/modals/create-ticket-modal"
+import { Database } from "@/types/supabase"
+import { useOrganization } from "@clerk/nextjs"
 
-// Dummy data for tickets
-const tickets = [
-  {
-    id: "T-1001",
-    subject: "Cannot access account",
-    requester: "john@example.com",
-    status: "Open",
-    priority: "High",
-    assignedTo: "Alice",
-    createdAt: "2023-04-01T10:00:00Z",
-  },
-  {
-    id: "T-1002",
-    subject: "Feature request",
-    requester: "sarah@example.com",
-    status: "Pending",
-    priority: "Normal",
-    assignedTo: "Bob",
-    createdAt: "2023-04-02T14:30:00Z",
-  },
-  // Add more dummy tickets as needed
-]
+type TicketStatus = Database['public']['Enums']['ticket_status']
+type TicketPriority = Database['public']['Enums']['ticket_priority']
+
+type TicketWithRelations = Database['public']['Tables']['tickets']['Row'] & {
+  customer: Database['public']['Tables']['customers']['Row']
+  assigned_agent: Database['public']['Tables']['agent_profiles']['Row'] | null
+}
 
 interface TicketListViewProps {
   onSelectTicket: (ticketId: string) => void
 }
 
 export function TicketListView({ onSelectTicket }: TicketListViewProps) {
+  const { organization } = useOrganization()
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [view, setView] = useState("All Open Tickets")
-  const [status, setStatus] = useState("All")
-  const [priority, setPriority] = useState("All")
+  const [status, setStatus] = useState<TicketStatus | "All">("All")
+  const [priority, setPriority] = useState<TicketPriority | "All">("All")
   const [assignedTo, setAssignedTo] = useState("All")
+  const [tickets, setTickets] = useState<TicketWithRelations[]>([])
+  const [isLoading, setIsLoading] = useState(true)
 
-  const handleCreateTicket = (data: any) => {
-    console.log('Creating ticket:', data)
-    setIsCreateModalOpen(false)
+  useEffect(() => {
+    if (organization) {
+      fetchTickets()
+    }
+  }, [status, priority, assignedTo, organization])
+
+  const fetchTickets = async () => {
+    if (!organization) return
+
+    try {
+      setIsLoading(true)
+      const params = new URLSearchParams()
+      params.append("orgId", organization.id)
+      if (status !== "All") params.append("status", status)
+      if (priority !== "All") params.append("priority", priority)
+      if (assignedTo !== "All") params.append("assignedTo", assignedTo)
+
+      const response = await fetch(`/api/tickets?${params.toString()}`)
+      if (!response.ok) throw new Error('Failed to fetch tickets')
+      const data = await response.json()
+      setTickets(data)
+    } catch (error) {
+      console.error('Error fetching tickets:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleCreateTicket = async (data: {
+    customerName: string
+    customerEmail: string
+    subject: string
+    status: TicketStatus
+    priority: TicketPriority
+    assignedTo?: string | null
+  }) => {
+    try {
+      const response = await fetch('/api/tickets', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      })
+
+      if (!response.ok) throw new Error('Failed to create ticket')
+      
+      await fetchTickets() // Refresh the list
+    } catch (error) {
+      console.error('Error creating ticket:', error)
+      // TODO: Show error toast
+    }
   }
 
   return (
@@ -61,39 +102,42 @@ export function TicketListView({ onSelectTicket }: TicketListViewProps) {
             <SelectItem value="Recently Solved">Recently Solved</SelectItem>
           </SelectContent>
         </Select>
-        <Select value={status} onValueChange={setStatus}>
-          <SelectTrigger className="w-[200px]">
-            <SelectValue placeholder="Select status" />
+
+        <Select value={status} onValueChange={(value: TicketStatus | "All") => setStatus(value)}>
+          <SelectTrigger className="w-[160px]">
+            <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="All">All</SelectItem>
-            <SelectItem value="Open">Open</SelectItem>
-            <SelectItem value="Pending">Pending</SelectItem>
-            <SelectItem value="Solved">Solved</SelectItem>
+            <SelectItem value="All">All Status</SelectItem>
+            <SelectItem value="open">Open</SelectItem>
+            <SelectItem value="pending">Pending</SelectItem>
+            <SelectItem value="solved">Solved</SelectItem>
+            <SelectItem value="closed">Closed</SelectItem>
           </SelectContent>
         </Select>
-        <Select value={priority} onValueChange={setPriority}>
-          <SelectTrigger className="w-[200px]">
-            <SelectValue placeholder="Select priority" />
+
+        <Select value={priority} onValueChange={(value: TicketPriority | "All") => setPriority(value)}>
+          <SelectTrigger className="w-[160px]">
+            <SelectValue placeholder="Priority" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="All">All</SelectItem>
-            <SelectItem value="Low">Low</SelectItem>
-            <SelectItem value="Normal">Normal</SelectItem>
-            <SelectItem value="High">High</SelectItem>
-            <SelectItem value="Urgent">Urgent</SelectItem>
+            <SelectItem value="All">All Priority</SelectItem>
+            <SelectItem value="low">Low</SelectItem>
+            <SelectItem value="normal">Normal</SelectItem>
+            <SelectItem value="high">High</SelectItem>
+            <SelectItem value="urgent">Urgent</SelectItem>
           </SelectContent>
         </Select>
+
         <Select value={assignedTo} onValueChange={setAssignedTo}>
-          <SelectTrigger className="w-[200px]">
-            <SelectValue placeholder="Assigned to" />
+          <SelectTrigger className="w-[160px]">
+            <SelectValue placeholder="Assigned To" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="All">All</SelectItem>
-            <SelectItem value="Unassigned">Unassigned</SelectItem>
-            <SelectItem value="Alice">Alice</SelectItem>
-            <SelectItem value="Bob">Bob</SelectItem>
-            {/* Add more agents as needed */}
+            <SelectItem value="All">All Agents</SelectItem>
+            <SelectItem value="unassigned">Unassigned</SelectItem>
+            <SelectItem value="alice">Alice</SelectItem>
+            <SelectItem value="bob">Bob</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -110,21 +154,31 @@ export function TicketListView({ onSelectTicket }: TicketListViewProps) {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {tickets.map((ticket) => (
-            <TableRow 
-              key={ticket.id} 
-              className="cursor-pointer hover:bg-stone-100/50 dark:hover:bg-stone-800/50"
-              onClick={() => onSelectTicket(ticket.id)}
-            >
-              <TableCell>{ticket.id}</TableCell>
-              <TableCell>{ticket.subject}</TableCell>
-              <TableCell>{ticket.requester}</TableCell>
-              <TableCell>{ticket.status}</TableCell>
-              <TableCell>{ticket.priority}</TableCell>
-              <TableCell>{ticket.assignedTo}</TableCell>
-              <TableCell>{new Date(ticket.createdAt).toLocaleString()}</TableCell>
+          {isLoading ? (
+            <TableRow>
+              <TableCell colSpan={7} className="text-center">Loading tickets...</TableCell>
             </TableRow>
-          ))}
+          ) : tickets.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={7} className="text-center">No tickets found</TableCell>
+            </TableRow>
+          ) : (
+            tickets.map((ticket) => (
+              <TableRow 
+                key={ticket.id} 
+                className="cursor-pointer hover:bg-stone-100/50 dark:hover:bg-stone-800/50"
+                onClick={() => onSelectTicket(ticket.id)}
+              >
+                <TableCell>{ticket.id}</TableCell>
+                <TableCell>{ticket.subject}</TableCell>
+                <TableCell>{ticket.customer.email}</TableCell>
+                <TableCell>{ticket.status}</TableCell>
+                <TableCell>{ticket.priority}</TableCell>
+                <TableCell>{ticket.assigned_agent?.name || 'Unassigned'}</TableCell>
+                <TableCell>{new Date(ticket.created_at!).toLocaleString()}</TableCell>
+              </TableRow>
+            ))
+          )}
         </TableBody>
       </Table>
 
