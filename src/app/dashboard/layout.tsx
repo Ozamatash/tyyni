@@ -1,10 +1,12 @@
-"use client"
-
-import { DashboardSidebar } from "./dashboard-sidebar"
-import { DashboardTopBar } from "./dashboard-top-bar"
+import { DashboardSidebar } from "@/components/layouts/dashboard/dashboard-sidebar"
+import { DashboardTopBar } from "@/components/layouts/dashboard/dashboard-top-bar"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 
-export function Dashboard({ children }: { children: React.ReactNode }) {
+export default function DashboardLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
   return (
     <SidebarProvider>
       <div className="flex h-screen w-full overflow-hidden">
@@ -18,5 +20,4 @@ export function Dashboard({ children }: { children: React.ReactNode }) {
       </div>
     </SidebarProvider>
   )
-}
-
+} 

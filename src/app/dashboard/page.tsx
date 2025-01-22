@@ -20,6 +20,6 @@ export default async function DashboardPage() {
     redirect("/customer");
   }
 
-  return <Dashboard />
+  redirect("/dashboard/tickets");
 }
 

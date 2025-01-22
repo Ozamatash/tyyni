@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { CreateTicketModal } from "@/components/modals/create-ticket-modal"
 import { Database } from "@/types/supabase"
 import { useOrganization } from "@clerk/nextjs"
+import { useRouter } from "next/navigation"
 
 type TicketStatus = Database['public']['Enums']['ticket_status']
 type TicketPriority = Database['public']['Enums']['ticket_priority']
@@ -16,11 +17,8 @@ type TicketWithRelations = Database['public']['Tables']['tickets']['Row'] & {
   assigned_agent: Database['public']['Tables']['agent_profiles']['Row'] | null
 }
 
-interface TicketListViewProps {
-  onSelectTicket: (ticketId: string) => void
-}
-
-export function TicketListView({ onSelectTicket }: TicketListViewProps) {
+export function TicketListView() {
+  const router = useRouter()
   const { organization } = useOrganization()
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [view, setView] = useState("All Open Tickets")
@@ -82,6 +80,10 @@ export function TicketListView({ onSelectTicket }: TicketListViewProps) {
       console.error('Error creating ticket:', error)
       // TODO: Show error toast
     }
+  }
+
+  const handleSelectTicket = (id: string) => {
+    router.push(`/dashboard/tickets/${id}`)
   }
 
   return (
@@ -167,7 +169,7 @@ export function TicketListView({ onSelectTicket }: TicketListViewProps) {
               <TableRow 
                 key={ticket.id} 
                 className="cursor-pointer hover:bg-stone-100/50 dark:hover:bg-stone-800/50"
-                onClick={() => onSelectTicket(ticket.id)}
+                onClick={() => handleSelectTicket(ticket.id)}
               >
                 <TableCell>{ticket.id}</TableCell>
                 <TableCell>{ticket.subject}</TableCell>
