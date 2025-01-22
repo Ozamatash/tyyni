@@ -42,27 +42,8 @@ export function AdminSettingsView() {
           <TabsTrigger value="config">Platform Configuration</TabsTrigger>
         </TabsList>
         
-        <TabsContent value="organization">
-          <Card>
-            <CardHeader>
-              <CardTitle>Organization Settings</CardTitle>
-              <CardDescription>
-                Manage your organization profile, members, and domains
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <OrganizationProfile 
-                appearance={{
-                  elements: {
-                    rootBox: "w-full",
-                    card: "shadow-none p-0",
-                    navbar: "hidden"
-                  }
-                }}
-                routing="hash"
-              />
-            </CardContent>
-          </Card>
+        <TabsContent value="organization" className="mt-0">
+          <OrganizationProfile routing="hash" />
         </TabsContent>
         
         <TabsContent value="config">
