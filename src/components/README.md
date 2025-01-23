@@ -15,6 +15,8 @@ components/
 │   ├── dashboard/       # Dashboard layout components
 ├── modals/               # Modal components
 └── shared/              # Shared components used across features
+└── modals/              # modals
+└── customer/              # Customer related components
 ```
 
 ## Organization Rules
