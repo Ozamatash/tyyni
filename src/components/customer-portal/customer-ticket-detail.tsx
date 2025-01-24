@@ -1,128 +1,145 @@
 "use client"
 
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Textarea } from "@/components/ui/textarea"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { ChevronLeft, Send } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { Avatar } from "@/components/ui/avatar"
+import { ArrowLeft, Send } from "lucide-react"
+
+interface Message {
+  id: string
+  content: string
+  sender: 'agent' | 'customer'
+  timestamp: string
+  senderName: string
+  senderEmail?: string
+}
+
+// Mock data
+const mockMessages: Message[] = [
+  {
+    id: '1',
+    content: 'Hi, how can I help you today?',
+    sender: 'agent',
+    timestamp: '2 hours ago',
+    senderName: 'Sofia Davis',
+    senderEmail: 'm@example.com'
+  },
+  {
+    id: '2',
+    content: "Hey, I'm having trouble with my account.",
+    sender: 'customer',
+    timestamp: '2 hours ago',
+    senderName: 'You'
+  },
+  {
+    id: '3',
+    content: 'What seems to be the problem?',
+    sender: 'agent',
+    timestamp: '1 hour ago',
+    senderName: 'Sofia Davis',
+    senderEmail: 'm@example.com'
+  },
+  {
+    id: '4',
+    content: "I can't log in.",
+    sender: 'customer',
+    timestamp: '1 hour ago',
+    senderName: 'You'
+  }
+]
 
 interface CustomerTicketDetailProps {
   ticketId: string
   onBack: () => void
 }
 
-// Mock data - replace with real data later
-const mockTicket = {
-  id: "1",
-  title: "Login Issue",
-  status: "active",
-  priority: "high",
-  createdAt: "2024-03-18",
-  lastUpdated: "2024-03-20",
-  description: "Unable to login to the dashboard after password reset",
-  history: [
-    {
-      id: "1",
-      type: "message",
-      content: "I'm having trouble logging in after resetting my password",
-      sender: "customer",
-      timestamp: "2024-03-18 09:00",
-    },
-    {
-      id: "2",
-      type: "status",
-      content: "Ticket assigned to support team",
-      timestamp: "2024-03-18 09:05",
-    },
-    {
-      id: "3",
-      type: "message",
-      content: "Have you cleared your browser cache and cookies?",
-      sender: "agent",
-      timestamp: "2024-03-18 09:15",
-    },
-    {
-      id: "4",
-      type: "message",
-      content: "Yes, I tried that but still no luck",
-      sender: "customer",
-      timestamp: "2024-03-18 09:20",
-    },
-  ],
-}
-
 export function CustomerTicketDetail({ ticketId, onBack }: CustomerTicketDetailProps) {
+  const [message, setMessage] = useState("")
+  const [messages, setMessages] = useState<Message[]>(mockMessages)
+
+  const handleSend = () => {
+    if (!message.trim()) return
+
+    const newMessage: Message = {
+      id: Date.now().toString(),
+      content: message,
+      sender: 'customer',
+      timestamp: 'Just now',
+      senderName: 'You'
+    }
+
+    setMessages([...messages, newMessage])
+    setMessage("")
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSend()
+    }
+  }
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center space-x-4">
+    <div className="flex flex-col h-[calc(100vh-16rem)]">
+      <div className="flex items-center gap-2 mb-6">
         <Button variant="ghost" size="icon" onClick={onBack}>
-          <ChevronLeft className="h-4 w-4" />
+          <ArrowLeft className="h-4 w-4" />
         </Button>
-        <div className="flex-1">
-          <h2 className="text-xl font-semibold">{mockTicket.title}</h2>
-          <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-            <span>Ticket #{mockTicket.id}</span>
-            <span>•</span>
-            <Badge variant={mockTicket.priority === "high" ? "destructive" : "default"}>
-              {mockTicket.priority}
-            </Badge>
-          </div>
-        </div>
+        <h2 className="text-lg font-semibold">Ticket #{ticketId}</h2>
       </div>
 
-      <Card className="p-4">
-        <h3 className="font-medium mb-2">Description</h3>
-        <p className="text-sm text-muted-foreground">{mockTicket.description}</p>
-      </Card>
+      <ScrollArea className="flex-1 pr-4">
+        <div className="space-y-4">
+          {messages.map((msg, index) => {
+            const isFirstMessageOfGroup = index === 0 || messages[index - 1].sender !== msg.sender
+            const showHeader = isFirstMessageOfGroup && msg.sender === 'agent'
 
-      <div className="space-y-4">
-        <h3 className="font-medium">Ticket History</h3>
-        <ScrollArea className="h-[400px] rounded-md border p-4">
-          <div className="space-y-4">
-            {mockTicket.history.map((item) => (
-              <div
-                key={item.id}
-                className={`flex flex-col ${
-                  item.type === "message" && item.sender === "customer"
-                    ? "items-end"
-                    : "items-start"
-                }`}
-              >
-                {item.type === "message" ? (
-                  <div
-                    className={`max-w-[80%] rounded-lg p-3 ${
-                      item.sender === "customer"
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted"
-                    }`}
-                  >
-                    <p className="text-sm">{item.content}</p>
-                  </div>
-                ) : (
-                  <div className="w-full text-center">
-                    <span className="text-xs text-muted-foreground">
-                      {item.content}
-                    </span>
+            return (
+              <div key={msg.id} className="space-y-1">
+                {showHeader && (
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-sm">{msg.senderName}</span>
+                    <span className="text-muted-foreground text-sm">{msg.senderEmail}</span>
                   </div>
                 )}
-                <span className="text-xs text-muted-foreground mt-1">
-                  {item.timestamp}
-                </span>
+                <div className={`flex ${msg.sender === 'customer' ? 'justify-end' : 'justify-start'}`}>
+                  <div className="max-w-[80%]">
+                    <div className={`
+                      px-4 py-2 text-sm inline-block
+                      ${msg.sender === 'customer'
+                        ? 'bg-blue-600 text-white rounded-[20px] rounded-br-[4px]'
+                        : 'bg-gray-100 text-gray-900 rounded-[20px] rounded-bl-[4px]'
+                      }
+                    `}>
+                      {msg.content}
+                    </div>
+                    <div className={`
+                      text-xs text-gray-500 mt-1
+                      ${msg.sender === 'customer' ? 'text-right' : 'text-left'}
+                    `}>
+                      {msg.timestamp}
+                    </div>
+                  </div>
+                </div>
               </div>
-            ))}
-          </div>
-        </ScrollArea>
-
-        <div className="flex items-center space-x-2">
-          <Textarea
-            placeholder="Type your message here..."
-            className="min-h-[80px]"
-          />
-          <Button size="icon" className="h-[80px]">
-            <Send className="h-4 w-4" />
-          </Button>
+            )
+          })}
         </div>
+      </ScrollArea>
+
+      <div className="mt-4 flex gap-2 items-center">
+        <Input
+          placeholder="Type your message..."
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          onKeyDown={handleKeyDown}
+          className="flex-1"
+        />
+        <Button size="icon" onClick={handleSend} disabled={!message.trim()}>
+          <Send className="h-4 w-4" />
+        </Button>
       </div>
     </div>
   )

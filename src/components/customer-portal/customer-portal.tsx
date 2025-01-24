@@ -46,7 +46,7 @@ export function CustomerPortal() {
             </TabsList>
             
             <TabsContent value="active" className="mt-6">
-              <Card className="bg-gray-100/50">
+              <Card>
                 <div className="p-6">
                   {selectedTicketId ? (
                     <CustomerTicketDetail 
@@ -64,7 +64,7 @@ export function CustomerPortal() {
             </TabsContent>
             
             <TabsContent value="closed" className="mt-6">
-              <Card className="bg-gray-100/50">
+              <Card>
                 <div className="p-6">
                   {selectedTicketId ? (
                     <CustomerTicketDetail 

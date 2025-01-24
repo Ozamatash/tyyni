@@ -81,6 +81,47 @@ export type Database = {
           },
         ]
       }
+      customer_access_tokens: {
+        Row: {
+          created_at: string | null
+          customer_id: string
+          email: string
+          expires_at: string
+          last_used_at: string | null
+          metadata: Json | null
+          status: Database["public"]["Enums"]["token_status"]
+          token: string
+        }
+        Insert: {
+          created_at?: string | null
+          customer_id: string
+          email: string
+          expires_at: string
+          last_used_at?: string | null
+          metadata?: Json | null
+          status?: Database["public"]["Enums"]["token_status"]
+          token: string
+        }
+        Update: {
+          created_at?: string | null
+          customer_id?: string
+          email?: string
+          expires_at?: string
+          last_used_at?: string | null
+          metadata?: Json | null
+          status?: Database["public"]["Enums"]["token_status"]
+          token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_access_tokens_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       customer_field_values: {
         Row: {
           created_at: string | null
@@ -298,6 +339,60 @@ export type Database = {
           },
         ]
       }
+      messages: {
+        Row: {
+          content: string
+          created_at: string | null
+          email_message_id: string | null
+          id: string
+          is_internal: boolean
+          metadata: Json | null
+          organization_id: string
+          sender_id: string
+          sender_type: Database["public"]["Enums"]["sender_type"]
+          ticket_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string | null
+          email_message_id?: string | null
+          id?: string
+          is_internal?: boolean
+          metadata?: Json | null
+          organization_id: string
+          sender_id: string
+          sender_type: Database["public"]["Enums"]["sender_type"]
+          ticket_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string | null
+          email_message_id?: string | null
+          id?: string
+          is_internal?: boolean
+          metadata?: Json | null
+          organization_id?: string
+          sender_id?: string
+          sender_type?: Database["public"]["Enums"]["sender_type"]
+          ticket_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       organizations: {
         Row: {
           clerk_id: string
@@ -327,70 +422,6 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: []
-      }
-      ticket_messages: {
-        Row: {
-          body: string
-          created_at: string | null
-          email_message_id: string | null
-          id: string
-          is_internal: boolean
-          metadata: Json | null
-          organization_id: string
-          sender_id: string
-          sender_type: Database["public"]["Enums"]["sender_type"]
-          ticket_id: string
-          updated_at: string | null
-        }
-        Insert: {
-          body: string
-          created_at?: string | null
-          email_message_id?: string | null
-          id?: string
-          is_internal?: boolean
-          metadata?: Json | null
-          organization_id: string
-          sender_id: string
-          sender_type: Database["public"]["Enums"]["sender_type"]
-          ticket_id: string
-          updated_at?: string | null
-        }
-        Update: {
-          body?: string
-          created_at?: string | null
-          email_message_id?: string | null
-          id?: string
-          is_internal?: boolean
-          metadata?: Json | null
-          organization_id?: string
-          sender_id?: string
-          sender_type?: Database["public"]["Enums"]["sender_type"]
-          ticket_id?: string
-          updated_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "ticket_messages_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "ticket_messages_sender_id_fkey"
-            columns: ["sender_id"]
-            isOneToOne: false
-            referencedRelation: "agent_profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "ticket_messages_ticket_id_fkey"
-            columns: ["ticket_id"]
-            isOneToOne: false
-            referencedRelation: "tickets"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       tickets: {
         Row: {
@@ -477,6 +508,7 @@ export type Database = {
       sender_type: "agent" | "customer" | "system"
       ticket_priority: "low" | "normal" | "high" | "urgent"
       ticket_status: "open" | "pending" | "solved" | "closed"
+      token_status: "active" | "expired" | "revoked"
     }
     CompositeTypes: {
       [_ in never]: never
