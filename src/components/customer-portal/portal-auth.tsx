@@ -15,8 +15,8 @@ interface PortalAuthProps {
 }
 
 export function PortalAuth({ onVerify, isLoading, error }: PortalAuthProps) {
-  const [token, setToken] = useState('yCB7XMj7QuVzNnWTRI_Y1BwbU_qAkmHC')
-  const [email, setEmail] = useState('jabajuutest@gmail.com')
+  const [token, setToken] = useState('')
+  const [email, setEmail] = useState('')
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -44,10 +44,24 @@ export function PortalAuth({ onVerify, isLoading, error }: PortalAuthProps) {
             <p className="mt-6 text-lg leading-8 text-gray-600">
               Enter your ticket token to access your support conversation
             </p>
-            <div className="mt-2 text-sm text-gray-500">
-              (Test Mode - Auto-filled with test credentials)
+            
+            <div className="mt-8 rounded-lg bg-gray-50 p-6 text-left shadow-sm ring-1 ring-gray-900/5 max-w-sm mx-auto">
+              <h2 className="font-medium text-gray-900">Demo Credentials</h2>
+              <div className="mt-2 space-y-2 text-sm text-gray-600">
+                <div>
+                  <p><span className="font-medium">Customer 1:</span></p>
+                  <p className="pl-4">Email: alice@example.com</p>
+                  <p className="pl-4">Token: demo-token-alice-123</p>
+                </div>
+                <div>
+                  <p><span className="font-medium">Customer 2:</span></p>
+                  <p className="pl-4">Email: bob@example.com</p>
+                  <p className="pl-4">Token: demo-token-bob-123</p>
+                </div>
+              </div>
             </div>
-            <form onSubmit={handleSubmit} className="mt-10 flex flex-col gap-4 max-w-sm mx-auto">
+
+            <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-4 max-w-sm mx-auto">
               <Input
                 type="text"
                 placeholder="Enter your ticket token"
