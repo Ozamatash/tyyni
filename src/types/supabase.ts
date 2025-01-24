@@ -492,6 +492,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      debug_token: {
+        Args: Record<PropertyKey, never>
+        Returns: string
+      }
       requesting_user_id: {
         Args: Record<PropertyKey, never>
         Returns: string
@@ -612,3 +616,9 @@ export type CompositeTypes<
     schema: keyof Database
   }
     ? keyof Database[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never = never,
+> = PublicCompositeTypeNameOrOptions extends { schema: keyof Database }
+  ? Database[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof PublicSchema["CompositeTypes"]
+    ? PublicSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never
