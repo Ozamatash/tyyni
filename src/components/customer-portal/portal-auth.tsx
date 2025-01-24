@@ -15,8 +15,8 @@ interface PortalAuthProps {
 }
 
 export function PortalAuth({ onVerify, isLoading, error }: PortalAuthProps) {
-  const [token, setToken] = useState('')
-  const [email, setEmail] = useState('')
+  const [token, setToken] = useState('yCB7XMj7QuVzNnWTRI_Y1BwbU_qAkmHC')
+  const [email, setEmail] = useState('jabajuutest@gmail.com')
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -44,6 +44,9 @@ export function PortalAuth({ onVerify, isLoading, error }: PortalAuthProps) {
             <p className="mt-6 text-lg leading-8 text-gray-600">
               Enter your ticket token to access your support conversation
             </p>
+            <div className="mt-2 text-sm text-gray-500">
+              (Test Mode - Auto-filled with test credentials)
+            </div>
             <form onSubmit={handleSubmit} className="mt-10 flex flex-col gap-4 max-w-sm mx-auto">
               <Input
                 type="text"

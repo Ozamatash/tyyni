@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { TokenVerificationPayload, VerifyTokenResponse } from '@/types/customer-portal'
 import { supabase } from '@/utils/supabase/server'
+import { cookies } from 'next/headers'
 
 export async function POST(request: Request) {
   try {
@@ -86,10 +87,30 @@ export async function POST(request: Request) {
       .update({ last_used_at: new Date().toISOString() })
       .eq('token', token)
 
-    return NextResponse.json<VerifyTokenResponse>({
+    // Create response with cookies
+    const response = NextResponse.json<VerifyTokenResponse>({
       verified: true,
       tickets: tickets
     })
+
+    // Set cookies with appropriate options
+    response.cookies.set('customer_token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      expires: new Date(tokenData.expires_at)
+    })
+
+    response.cookies.set('customer_email', email, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      expires: new Date(tokenData.expires_at)
+    })
+
+    return response
 
   } catch (error) {
     console.error('Token verification error:', error)

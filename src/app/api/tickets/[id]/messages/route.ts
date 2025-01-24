@@ -4,10 +4,10 @@ import { supabase } from '@/utils/supabase/server'
 
 export async function POST(
   request: Request,
-  context: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = await Promise.resolve(context.params)
+    const { id } = await Promise.resolve((await context.params))
     const authData = await auth()
     const { userId, orgId: clerkOrgId } = authData
     if (!userId || !clerkOrgId) {

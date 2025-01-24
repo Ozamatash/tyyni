@@ -4,10 +4,10 @@ import { supabase } from '@/utils/supabase/server'
 
 export async function GET(
   request: Request,
-  context: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = await Promise.resolve(context.params)
+    const { id } = await Promise.resolve((await context.params))
     const authData = await auth()
     const { userId, orgId: clerkOrgId } = authData
     if (!userId || !clerkOrgId) {
@@ -57,10 +57,10 @@ export async function GET(
 
 export async function PATCH(
   request: Request,
-  context: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = await Promise.resolve(context.params)
+    const { id } = await Promise.resolve((await context.params))
     const authData = await auth()
     const { userId, orgId: clerkOrgId } = authData
     if (!userId || !clerkOrgId) {
