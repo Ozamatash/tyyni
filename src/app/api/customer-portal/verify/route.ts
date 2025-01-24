@@ -16,7 +16,7 @@ export async function POST(request: Request) {
     // Verify token exists and is valid
     const { data: tokenData, error: tokenError } = await supabase
       .from('customer_access_tokens')
-      .select('customer_id, status')
+      .select('customer_id, status, expires_at')
       .eq('token', token)
       .eq('email', email)
       .single()
@@ -35,17 +35,45 @@ export async function POST(request: Request) {
       }, { status: 401 })
     }
 
+    // Check if token has expired
+    if (new Date(tokenData.expires_at) < new Date()) {
+      // Update token status to expired
+      await supabase
+        .from('customer_access_tokens')
+        .update({ status: 'expired' })
+        .eq('token', token)
+
+      return NextResponse.json<VerifyTokenResponse>({
+        verified: false,
+        error: 'Token has expired'
+      }, { status: 401 })
+    }
+
     // Fetch customer's tickets with their messages
     const { data: tickets, error: ticketsError } = await supabase
       .from('tickets')
       .select(`
-        *,
-        messages (*)
+        id,
+        subject,
+        status,
+        priority,
+        created_at,
+        updated_at,
+        last_activity_at,
+        messages (
+          id,
+          content,
+          created_at,
+          sender_type,
+          is_internal
+        )
       `)
       .eq('customer_id', tokenData.customer_id)
       .order('created_at', { ascending: false })
+      .limit(10) // Limit to 10 most recent tickets initially
 
     if (ticketsError) {
+      console.error('Error fetching tickets:', ticketsError)
       return NextResponse.json<VerifyTokenResponse>({
         verified: false,
         error: 'Failed to fetch tickets'

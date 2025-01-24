@@ -1,12 +1,13 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Input } from "@/components/ui/input"
 import { ArrowLeft, Send } from "lucide-react"
 import { formatDistanceToNow } from 'date-fns'
 import type { Database } from '@/types/supabase'
+import { supabase } from '@/utils/supabase/client'
 
 type Message = Database['public']['Tables']['messages']['Row']
 
@@ -20,23 +21,30 @@ export function CustomerTicketDetail({ ticketId, onBack }: CustomerTicketDetailP
   const [messages, setMessages] = useState<Message[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string>()
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
 
   const formatDate = (date: string | null) => {
     if (!date) return 'Unknown'
     return formatDistanceToNow(new Date(date), { addSuffix: true })
   }
 
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+  }
+
   useEffect(() => {
     const fetchMessages = async () => {
       try {
         const response = await fetch(`/api/customer-portal/tickets/${ticketId}/messages`)
-        const data = await response.json()
-
         if (!response.ok) {
+          const data = await response.json()
           throw new Error(data.error || 'Failed to fetch messages')
         }
 
+        const data = await response.json()
         setMessages(data.messages)
+        setTimeout(scrollToBottom, 100) // Scroll after messages are rendered
       } catch (error) {
         setError(error instanceof Error ? error.message : 'An error occurred')
       } finally {
@@ -44,7 +52,55 @@ export function CustomerTicketDetail({ ticketId, onBack }: CustomerTicketDetailP
       }
     }
 
+    const setupRealtimeSubscription = () => {
+      // Clean up existing subscription if any
+      if (channelRef.current) {
+        channelRef.current.unsubscribe()
+      }
+
+      // Create new subscription
+      channelRef.current = supabase
+        .channel(`ticket:${ticketId}`)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'messages',
+            filter: `ticket_id=eq.${ticketId}`
+          },
+          (payload) => {
+            if (payload.eventType === 'INSERT') {
+              setMessages(prev => [...prev, payload.new as Message])
+              setTimeout(scrollToBottom, 100)
+            } else if (payload.eventType === 'DELETE') {
+              setMessages(prev => prev.filter(msg => msg.id !== payload.old.id))
+            } else if (payload.eventType === 'UPDATE') {
+              setMessages(prev => 
+                prev.map(msg => msg.id === payload.new.id ? payload.new as Message : msg)
+              )
+            }
+          }
+        )
+        .subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            console.log('Connected to realtime updates')
+          }
+          if (status === 'CHANNEL_ERROR') {
+            console.error('Failed to connect to realtime updates')
+            setError('Failed to connect to realtime updates')
+          }
+        })
+    }
+
     fetchMessages()
+    setupRealtimeSubscription()
+
+    return () => {
+      if (channelRef.current) {
+        channelRef.current.unsubscribe()
+      }
+    }
   }, [ticketId])
 
   const handleSend = async () => {
@@ -57,13 +113,11 @@ export function CustomerTicketDetail({ ticketId, onBack }: CustomerTicketDetailP
         body: JSON.stringify({ content: message })
       })
 
-      const data = await response.json()
-
       if (!response.ok) {
+        const data = await response.json()
         throw new Error(data.error || 'Failed to send message')
       }
 
-      setMessages(prev => [...prev, data.message])
       setMessage("")
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Failed to send message')
@@ -139,6 +193,7 @@ export function CustomerTicketDetail({ ticketId, onBack }: CustomerTicketDetailP
               </div>
             )
           })}
+          <div ref={messagesEndRef} />
         </div>
       </ScrollArea>
 

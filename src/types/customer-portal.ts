@@ -1,7 +1,15 @@
 import { Database } from './supabase'
 
-export type CustomerTicket = Database['public']['Tables']['tickets']['Row'] & {
-  messages: Database['public']['Tables']['messages']['Row'][]
+export type CustomerTicketMessage = Pick<
+  Database['public']['Tables']['messages']['Row'],
+  'id' | 'content' | 'created_at' | 'sender_type' | 'is_internal'
+>
+
+export type CustomerTicket = Pick<
+  Database['public']['Tables']['tickets']['Row'],
+  'id' | 'subject' | 'status' | 'priority' | 'created_at' | 'updated_at' | 'last_activity_at'
+> & {
+  messages: CustomerTicketMessage[]
 }
 
 export type VerifyTokenResponse = {
