@@ -16,7 +16,7 @@ type SenderType = Database['public']['Enums']['sender_type']
 type TicketWithRelations = Database['public']['Tables']['tickets']['Row'] & {
   customer: Database['public']['Tables']['customers']['Row']
   assigned_agent: Database['public']['Tables']['agent_profiles']['Row'] | null
-  messages: Array<Database['public']['Tables']['ticket_messages']['Row'] & {
+  messages: Array<Database['public']['Tables']['messages']['Row'] & {
     sender: Database['public']['Tables']['agent_profiles']['Row'] | null
   }>
 }
@@ -107,7 +107,7 @@ export function TicketDetailView({ ticketId, onBack }: TicketDetailViewProps) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          body: reply,
+          content: reply,
           is_internal: false,
         }),
       })
@@ -133,7 +133,7 @@ export function TicketDetailView({ ticketId, onBack }: TicketDetailViewProps) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          body: reply,
+          content: reply,
           is_internal: true,
         }),
       })
@@ -292,7 +292,7 @@ export function TicketDetailView({ ticketId, onBack }: TicketDetailViewProps) {
                     {new Date(message.created_at!).toLocaleString()}
                   </span>
                 </div>
-                <p>{message.body}</p>
+                <p>{message.content}</p>
               </div>
             ))}
           </div>
@@ -327,8 +327,8 @@ export function TicketDetailView({ ticketId, onBack }: TicketDetailViewProps) {
       </Card>
 
       <InsertMacroModal
-        isOpen={isMacroModalOpen}
-        onClose={() => setIsMacroModalOpen(false)}
+        open={isMacroModalOpen}
+        onOpenChange={setIsMacroModalOpen}
         onSelect={handleInsertMacro}
       />
     </div>

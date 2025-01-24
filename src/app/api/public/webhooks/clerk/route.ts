@@ -97,6 +97,11 @@ export async function POST(req: Request) {
   if (eventType === 'organization.deleted') {
     const org = evt.data
     
+    if (!org.id) {
+      console.error('Missing organization ID in webhook event')
+      return new Response('Missing organization ID', { status: 400 })
+    }
+    
     // Delete organization and all related data (cascade delete should handle related records)
     const { error: deleteError } = await supabase
       .from('organizations')

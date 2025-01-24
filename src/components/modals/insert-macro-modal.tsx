@@ -37,12 +37,12 @@ const macros = [
 ]
 
 interface InsertMacroModalProps {
-  isOpen: boolean
-  onClose: () => void
+  open: boolean
+  onOpenChange: (open: boolean) => void
   onSelect: (content: string) => void
 }
 
-export function InsertMacroModal({ isOpen, onClose, onSelect }: InsertMacroModalProps) {
+export function InsertMacroModal({ open, onOpenChange, onSelect }: InsertMacroModalProps) {
   const [searchQuery, setSearchQuery] = useState("")
   
   const filteredMacros = macros.filter(macro => 
@@ -51,7 +51,7 @@ export function InsertMacroModal({ isOpen, onClose, onSelect }: InsertMacroModal
   )
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>Insert Macro</DialogTitle>
@@ -73,7 +73,7 @@ export function InsertMacroModal({ isOpen, onClose, onSelect }: InsertMacroModal
                 className="rounded-lg border p-3 hover:bg-accent cursor-pointer"
                 onClick={() => {
                   onSelect(macro.content)
-                  onClose()
+                  onOpenChange(false)
                 }}
               >
                 <h4 className="font-medium mb-1">{macro.title}</h4>
