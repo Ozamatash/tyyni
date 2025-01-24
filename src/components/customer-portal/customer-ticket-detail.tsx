@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { ArrowLeft, Send } from "lucide-react"
 import { formatDistanceToNow } from 'date-fns'
 import type { Database } from '@/types/supabase'
+import type { RealtimeChannel } from '@supabase/supabase-js'
 import { supabase } from '@/utils/supabase/client'
 
 type Message = Database['public']['Tables']['messages']['Row']
@@ -22,7 +23,7 @@ export function CustomerTicketDetail({ ticketId, onBack }: CustomerTicketDetailP
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string>()
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
+  const channelRef = useRef<RealtimeChannel | null>(null)
 
   const formatDate = (date: string | null) => {
     if (!date) return 'Unknown'
@@ -46,6 +47,7 @@ export function CustomerTicketDetail({ ticketId, onBack }: CustomerTicketDetailP
         setMessages(data.messages)
         setTimeout(scrollToBottom, 100) // Scroll after messages are rendered
       } catch (error) {
+        console.error('Error fetching messages:', error)
         setError(error instanceof Error ? error.message : 'An error occurred')
       } finally {
         setIsLoading(false)
@@ -82,15 +84,7 @@ export function CustomerTicketDetail({ ticketId, onBack }: CustomerTicketDetailP
             }
           }
         )
-        .subscribe((status) => {
-          if (status === 'SUBSCRIBED') {
-            console.log('Connected to realtime updates')
-          }
-          if (status === 'CHANNEL_ERROR') {
-            console.error('Failed to connect to realtime updates')
-            setError('Failed to connect to realtime updates')
-          }
-        })
+        .subscribe()
     }
 
     fetchMessages()

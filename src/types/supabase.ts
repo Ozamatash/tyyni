@@ -496,6 +496,12 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: string
       }
+      set_customer_token: {
+        Args: {
+          token: string
+        }
+        Returns: undefined
+      }
     }
     Enums: {
       field_type:
@@ -606,9 +612,3 @@ export type CompositeTypes<
     schema: keyof Database
   }
     ? keyof Database[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
-> = PublicCompositeTypeNameOrOptions extends { schema: keyof Database }
-  ? Database[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
-  : PublicCompositeTypeNameOrOptions extends keyof PublicSchema["CompositeTypes"]
-    ? PublicSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
-    : never

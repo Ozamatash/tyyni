@@ -33,7 +33,7 @@ export function PortalContainer() {
         ...prev,
         isVerified: true,
         tickets: data.tickets || [],
-        isLoading: false
+        isLoading: false,
       }))
     } catch (error) {
       setState(prev => ({

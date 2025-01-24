@@ -1,5 +1,6 @@
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
+import { createServerSupabaseClient } from '@/utils/supabase/server'
 
 /**
  * Role-Based Access Control (RBAC) Structure:
@@ -33,8 +34,13 @@ const routes = {
 export default clerkMiddleware(async (auth, req) => {
   const { userId, orgId, orgRole } = await auth()
 
+  // Handle customer portal routes
+  if (routes.customerPortal(req)) {
+    return NextResponse.next()
+  }
+
   // Allow public routes
-  if (routes.auth(req) || routes.publicApi(req) || routes.customerPortal(req)) {
+  if (routes.auth(req) || routes.publicApi(req)) {
     return NextResponse.next()
   }
 

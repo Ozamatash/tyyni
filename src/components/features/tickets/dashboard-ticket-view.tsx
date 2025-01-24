@@ -1,23 +1,30 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { InsertMacroModal } from "@/components/modals/insert-macro-modal"
 import { Database } from "@/types/supabase"
+import type { RealtimeChannel } from "@supabase/supabase-js"
+import { supabase } from "@/utils/supabase/client"
 
 type TicketStatus = Database['public']['Enums']['ticket_status']
 type TicketPriority = Database['public']['Enums']['ticket_priority']
-type SenderType = Database['public']['Enums']['sender_type']
+type Message = Database['public']['Tables']['messages']['Row']
 
-type TicketWithRelations = Database['public']['Tables']['tickets']['Row'] & {
-  customer: Database['public']['Tables']['customers']['Row']
-  assigned_agent: Database['public']['Tables']['agent_profiles']['Row'] | null
-  messages: Array<Database['public']['Tables']['messages']['Row'] & {
-    sender: Database['public']['Tables']['agent_profiles']['Row'] | null
-  }>
+interface TicketWithMessages {
+  id: string
+  subject: string
+  status: TicketStatus
+  priority: TicketPriority
+  customer: {
+    id: string
+    name: string
+    email: string
+  }
+  messages: Message[]
 }
 
 interface DashboardTicketViewProps {
@@ -25,12 +32,18 @@ interface DashboardTicketViewProps {
 }
 
 export function DashboardTicketView({ ticketId }: DashboardTicketViewProps) {
-  const [ticket, setTicket] = useState<TicketWithRelations | null>(null)
+  const [ticket, setTicket] = useState<TicketWithMessages | null>(null)
   const [reply, setReply] = useState("")
   const [isLoading, setIsLoading] = useState(true)
   const [isSending, setIsSending] = useState(false)
   const [error, setError] = useState<string>()
   const [isMacroModalOpen, setIsMacroModalOpen] = useState(false)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const channelRef = useRef<RealtimeChannel | null>(null)
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+  }
 
   useEffect(() => {
     const fetchTicket = async () => {
@@ -41,6 +54,7 @@ export function DashboardTicketView({ ticketId }: DashboardTicketViewProps) {
         }
         const data = await response.json()
         setTicket(data.ticket)
+        setTimeout(scrollToBottom, 100)
       } catch (error) {
         setError(error instanceof Error ? error.message : 'An error occurred')
       } finally {
@@ -48,7 +62,45 @@ export function DashboardTicketView({ ticketId }: DashboardTicketViewProps) {
       }
     }
 
+    const setupRealtimeSubscription = () => {
+      // Clean up existing subscription if any
+      if (channelRef.current) {
+        channelRef.current.unsubscribe()
+      }
+
+      const channel = supabase
+        .channel(`ticket:${ticketId}`)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'messages',
+            filter: `ticket_id=eq.${ticketId}`
+          },
+          async () => {
+            // Fetch the complete ticket with relations
+            const response = await fetch(`/api/dashboard/tickets/${ticketId}`)
+            if (response.ok) {
+              const data = await response.json()
+              setTicket(data.ticket)
+              setTimeout(scrollToBottom, 100)
+            }
+          }
+        )
+        .subscribe()
+
+      channelRef.current = channel
+    }
+
     fetchTicket()
+    setupRealtimeSubscription()
+
+    return () => {
+      if (channelRef.current) {
+        channelRef.current.unsubscribe()
+      }
+    }
   }, [ticketId])
 
   const handleUpdateTicket = async (status: TicketStatus) => {
@@ -66,7 +118,7 @@ export function DashboardTicketView({ ticketId }: DashboardTicketViewProps) {
       const data = await response.json()
       setTicket(data.ticket)
     } catch (error) {
-      setError(error instanceof Error ? error.message : 'Failed to update ticket')
+      setError(error instanceof Error ? error.message : 'An error occurred')
     }
   }
 
@@ -78,7 +130,7 @@ export function DashboardTicketView({ ticketId }: DashboardTicketViewProps) {
       const response = await fetch(`/api/dashboard/tickets/${ticketId}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: reply, isInternal: false })
+        body: JSON.stringify({ content: reply })
       })
 
       if (!response.ok) {
@@ -92,15 +144,10 @@ export function DashboardTicketView({ ticketId }: DashboardTicketViewProps) {
       } : null)
       setReply("")
     } catch (error) {
-      setError(error instanceof Error ? error.message : 'Failed to send reply')
+      setError(error instanceof Error ? error.message : 'An error occurred')
     } finally {
       setIsSending(false)
     }
-  }
-
-  const handleInsertMacro = (content: string) => {
-    setReply(prev => prev + content)
-    setIsMacroModalOpen(false)
   }
 
   if (isLoading) {
@@ -120,21 +167,23 @@ export function DashboardTicketView({ ticketId }: DashboardTicketViewProps) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Ticket #{ticketId.substring(0, 8)}</h1>
-          <p className="text-sm text-muted-foreground">
-            From: {ticket.customer.name} ({ticket.customer.email})
-          </p>
+          <h1 className="text-2xl font-bold">{ticket.subject}</h1>
+          <div className="flex items-center gap-2 text-sm text-gray-500">
+            <span>{ticket.customer.name}</span>
+            <span>·</span>
+            <span>{ticket.customer.email}</span>
+          </div>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2">
           <Select
             value={ticket.status}
-            onValueChange={(value: TicketStatus) => handleUpdateTicket(value)}
+            onValueChange={(value) => handleUpdateTicket(value as TicketStatus)}
           >
-            <SelectTrigger className="w-32">
-              <SelectValue />
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Status" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="open">Open</SelectItem>
@@ -155,53 +204,46 @@ export function DashboardTicketView({ ticketId }: DashboardTicketViewProps) {
             <div
               key={message.id}
               className={`p-4 rounded-lg ${
-                message.sender_type === 'agent'
-                  ? 'bg-primary/10 ml-8'
-                  : 'bg-muted mr-8'
+                message.sender_type === 'customer'
+                  ? 'bg-gray-100'
+                  : message.is_internal
+                  ? 'bg-yellow-50 border border-yellow-200'
+                  : 'bg-blue-50 border border-blue-200'
               }`}
             >
-              <div className="flex items-center justify-between mb-2">
-                <span className="font-medium">
-                  {message.sender_type === 'agent'
-                    ? message.sender?.name || 'Support Agent'
-                    : ticket.customer.name}
-                </span>
-                <span className="text-sm text-muted-foreground">
-                  {new Date(message.created_at!).toLocaleString()}
-                </span>
-              </div>
               <p className="whitespace-pre-wrap">{message.content}</p>
             </div>
           ))}
+          <div ref={messagesEndRef} />
         </CardContent>
       </Card>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Reply</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setIsMacroModalOpen(true)}
-            >
-              Insert Macro
-            </Button>
-          </div>
-          <Textarea
-            placeholder="Type your reply..."
-            value={reply}
-            onChange={(e) => setReply(e.target.value)}
-            className="min-h-[200px]"
-          />
-          <div className="flex justify-end">
-            <Button
-              onClick={handleSendReply}
-              disabled={!reply.trim() || isSending}
-            >
-              Send Reply
-            </Button>
+        <CardContent className="pt-6">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold">Reply</h3>
+              <Button
+                variant="outline"
+                onClick={() => setIsMacroModalOpen(true)}
+              >
+                Insert Macro
+              </Button>
+            </div>
+            <Textarea
+              placeholder="Type your reply..."
+              value={reply}
+              onChange={(e) => setReply(e.target.value)}
+              className="min-h-[200px]"
+            />
+            <div className="flex justify-end">
+              <Button
+                onClick={handleSendReply}
+                disabled={!reply.trim() || isSending}
+              >
+                {isSending ? 'Sending...' : 'Send Reply'}
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -209,7 +251,10 @@ export function DashboardTicketView({ ticketId }: DashboardTicketViewProps) {
       <InsertMacroModal
         open={isMacroModalOpen}
         onOpenChange={setIsMacroModalOpen}
-        onSelect={handleInsertMacro}
+        onSelect={(content) => {
+          setReply(prev => prev + content)
+          setIsMacroModalOpen(false)
+        }}
       />
     </div>
   )
