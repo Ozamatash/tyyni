@@ -1,54 +1,14 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Input } from "@/components/ui/input"
-import { Avatar } from "@/components/ui/avatar"
 import { ArrowLeft, Send } from "lucide-react"
+import { formatDistanceToNow } from 'date-fns'
+import type { Database } from '@/types/supabase'
 
-interface Message {
-  id: string
-  content: string
-  sender: 'agent' | 'customer'
-  timestamp: string
-  senderName: string
-  senderEmail?: string
-}
-
-// Mock data
-const mockMessages: Message[] = [
-  {
-    id: '1',
-    content: 'Hi, how can I help you today?',
-    sender: 'agent',
-    timestamp: '2 hours ago',
-    senderName: 'Sofia Davis',
-    senderEmail: 'm@example.com'
-  },
-  {
-    id: '2',
-    content: "Hey, I'm having trouble with my account.",
-    sender: 'customer',
-    timestamp: '2 hours ago',
-    senderName: 'You'
-  },
-  {
-    id: '3',
-    content: 'What seems to be the problem?',
-    sender: 'agent',
-    timestamp: '1 hour ago',
-    senderName: 'Sofia Davis',
-    senderEmail: 'm@example.com'
-  },
-  {
-    id: '4',
-    content: "I can't log in.",
-    sender: 'customer',
-    timestamp: '1 hour ago',
-    senderName: 'You'
-  }
-]
+type Message = Database['public']['Tables']['messages']['Row']
 
 interface CustomerTicketDetailProps {
   ticketId: string
@@ -57,21 +17,57 @@ interface CustomerTicketDetailProps {
 
 export function CustomerTicketDetail({ ticketId, onBack }: CustomerTicketDetailProps) {
   const [message, setMessage] = useState("")
-  const [messages, setMessages] = useState<Message[]>(mockMessages)
+  const [messages, setMessages] = useState<Message[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string>()
 
-  const handleSend = () => {
-    if (!message.trim()) return
+  const formatDate = (date: string | null) => {
+    if (!date) return 'Unknown'
+    return formatDistanceToNow(new Date(date), { addSuffix: true })
+  }
 
-    const newMessage: Message = {
-      id: Date.now().toString(),
-      content: message,
-      sender: 'customer',
-      timestamp: 'Just now',
-      senderName: 'You'
+  useEffect(() => {
+    const fetchMessages = async () => {
+      try {
+        const response = await fetch(`/api/customer-portal/tickets/${ticketId}/messages`)
+        const data = await response.json()
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to fetch messages')
+        }
+
+        setMessages(data.messages)
+      } catch (error) {
+        setError(error instanceof Error ? error.message : 'An error occurred')
+      } finally {
+        setIsLoading(false)
+      }
     }
 
-    setMessages([...messages, newMessage])
-    setMessage("")
+    fetchMessages()
+  }, [ticketId])
+
+  const handleSend = async () => {
+    if (!message.trim()) return
+
+    try {
+      const response = await fetch(`/api/customer-portal/tickets/${ticketId}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: message })
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to send message')
+      }
+
+      setMessages(prev => [...prev, data.message])
+      setMessage("")
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to send message')
+    }
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -81,34 +77,51 @@ export function CustomerTicketDetail({ ticketId, onBack }: CustomerTicketDetailP
     }
   }
 
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-[calc(100vh-16rem)]">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[calc(100vh-16rem)]">
+        <p className="text-red-600 mb-4">{error}</p>
+        <Button onClick={onBack}>Go Back</Button>
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col h-[calc(100vh-16rem)]">
       <div className="flex items-center gap-2 mb-6">
         <Button variant="ghost" size="icon" onClick={onBack}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
-        <h2 className="text-lg font-semibold">Ticket #{ticketId}</h2>
+        <h2 className="text-lg font-semibold">Ticket #{ticketId.substring(0, 8)}</h2>
       </div>
 
       <ScrollArea className="flex-1 pr-4">
         <div className="space-y-4">
           {messages.map((msg, index) => {
-            const isFirstMessageOfGroup = index === 0 || messages[index - 1].sender !== msg.sender
-            const showHeader = isFirstMessageOfGroup && msg.sender === 'agent'
+            const isFirstMessageOfGroup = index === 0 || messages[index - 1].sender_type !== msg.sender_type
+            const showHeader = isFirstMessageOfGroup && msg.sender_type === 'agent'
+            const isCustomer = msg.sender_type === 'customer'
 
             return (
               <div key={msg.id} className="space-y-1">
                 {showHeader && (
                   <div className="flex items-center gap-2">
-                    <span className="font-medium text-sm">{msg.senderName}</span>
-                    <span className="text-muted-foreground text-sm">{msg.senderEmail}</span>
+                    <span className="font-medium text-sm">Support Agent</span>
                   </div>
                 )}
-                <div className={`flex ${msg.sender === 'customer' ? 'justify-end' : 'justify-start'}`}>
+                <div className={`flex ${isCustomer ? 'justify-end' : 'justify-start'}`}>
                   <div className="max-w-[80%]">
                     <div className={`
                       px-4 py-2 text-sm inline-block
-                      ${msg.sender === 'customer'
+                      ${isCustomer
                         ? 'bg-blue-600 text-white rounded-[20px] rounded-br-[4px]'
                         : 'bg-gray-100 text-gray-900 rounded-[20px] rounded-bl-[4px]'
                       }
@@ -117,9 +130,9 @@ export function CustomerTicketDetail({ ticketId, onBack }: CustomerTicketDetailP
                     </div>
                     <div className={`
                       text-xs text-gray-500 mt-1
-                      ${msg.sender === 'customer' ? 'text-right' : 'text-left'}
+                      ${isCustomer ? 'text-right' : 'text-left'}
                     `}>
-                      {msg.timestamp}
+                      {formatDate(msg.created_at)}
                     </div>
                   </div>
                 </div>
