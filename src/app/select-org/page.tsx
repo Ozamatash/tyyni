@@ -1,38 +1,50 @@
 'use client'
 
-import { useOrganizationList } from '@clerk/nextjs'
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { OrganizationList } from '@clerk/nextjs'
+import { OrganizationList, useAuth, useOrganization } from "@clerk/nextjs"
+import { useRouter } from "next/navigation"
+import { supabase } from "@/utils/supabase/client"
+import { useEffect } from "react"
 
 export default function SelectOrganizationPage() {
-  const { isLoaded, userMemberships } = useOrganizationList({
-    userMemberships: true
-  })
+  const { userId, isLoaded: isAuthLoaded } = useAuth()
+  const { organization, isLoaded: isOrgLoaded } = useOrganization()
   const router = useRouter()
-  const [isProcessing, setIsProcessing] = useState(false)
 
-  if (!isLoaded) {
-    return <div>Loading...</div>
-  }
+  useEffect(() => {
+    async function checkAndRedirect() {
+      // Wait for auth to load
+      if (!isAuthLoaded) return
+      
+      // Redirect to sign in if not authenticated
+      if (!userId) {
+        router.push("/auth/sign-in")
+        return
+      }
+
+      // If user has an org selected, check for slug and redirect
+      if (isOrgLoaded && organization) {
+        const { data: org } = await supabase
+          .from('organizations')
+          .select('slug')
+          .eq('clerk_id', organization.id)
+          .single()
+          
+        if (org) {
+          router.push(`/${org.slug}/tickets`)
+        }
+      }
+    }
+
+    checkAndRedirect()
+  }, [userId, organization, isAuthLoaded, isOrgLoaded, router])
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-      <div className="w-full max-w-md space-y-8">
-        <div>
-          <h2 className="mt-6 text-center text-3xl font-bold tracking-tight text-gray-900">
-            Select your organization
-          </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
-            Choose an organization to continue to the dashboard
-          </p>
-        </div>
-        <OrganizationList 
-          hidePersonal
-          afterSelectOrganizationUrl="/dashboard"
-          afterCreateOrganizationUrl="/dashboard"
-        />
-      </div>
+    <div className="flex min-h-screen items-center justify-center">
+      <OrganizationList
+        hidePersonal
+        afterSelectOrganizationUrl="/:slug/tickets"
+        afterCreateOrganizationUrl="/:slug/tickets"
+      />
     </div>
   )
 } 

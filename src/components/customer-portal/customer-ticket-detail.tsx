@@ -10,14 +10,21 @@ import type { Database } from '@/types/supabase'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import { supabase } from '@/utils/supabase/client'
 
-type Message = Database['public']['Tables']['messages']['Row']
+type Message = Database['public']['Tables']['messages']['Row'] & {
+  sender: {
+    name: string
+    email: string
+  } | null
+}
 
 interface CustomerTicketDetailProps {
   ticketId: string
   onBack: () => void
+  orgSlug: string
+  token: string
 }
 
-export function CustomerTicketDetail({ ticketId, onBack }: CustomerTicketDetailProps) {
+export function CustomerTicketDetail({ ticketId, onBack, orgSlug, token }: CustomerTicketDetailProps) {
   const [message, setMessage] = useState("")
   const [messages, setMessages] = useState<Message[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -37,7 +44,14 @@ export function CustomerTicketDetail({ ticketId, onBack }: CustomerTicketDetailP
   useEffect(() => {
     const fetchMessages = async () => {
       try {
-        const response = await fetch(`/api/customer-portal/tickets/${ticketId}/messages`)
+        const response = await fetch(
+          `/api/tickets/${ticketId}/messages?org=${orgSlug}&context=customer`,
+          {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          }
+        )
         if (!response.ok) {
           const data = await response.json()
           throw new Error(data.error || 'Failed to fetch messages')
@@ -73,14 +87,22 @@ export function CustomerTicketDetail({ ticketId, onBack }: CustomerTicketDetailP
           },
           (payload) => {
             if (payload.eventType === 'INSERT') {
-              setMessages(prev => [...prev, payload.new as Message])
-              setTimeout(scrollToBottom, 100)
+              const newMessage = payload.new as Message
+              // Only add non-internal messages
+              if (!newMessage.is_internal) {
+                setMessages(prev => [...prev, newMessage])
+                setTimeout(scrollToBottom, 100)
+              }
             } else if (payload.eventType === 'DELETE') {
               setMessages(prev => prev.filter(msg => msg.id !== payload.old.id))
             } else if (payload.eventType === 'UPDATE') {
-              setMessages(prev => 
-                prev.map(msg => msg.id === payload.new.id ? payload.new as Message : msg)
-              )
+              const updatedMessage = payload.new as Message
+              // Only update if message is non-internal
+              if (!updatedMessage.is_internal) {
+                setMessages(prev => 
+                  prev.map(msg => msg.id === updatedMessage.id ? updatedMessage : msg)
+                )
+              }
             }
           }
         )
@@ -95,17 +117,23 @@ export function CustomerTicketDetail({ ticketId, onBack }: CustomerTicketDetailP
         channelRef.current.unsubscribe()
       }
     }
-  }, [ticketId])
+  }, [ticketId, orgSlug, token])
 
   const handleSend = async () => {
     if (!message.trim()) return
 
     try {
-      const response = await fetch(`/api/customer-portal/tickets/${ticketId}/messages`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: message })
-      })
+      const response = await fetch(
+        `/api/tickets/${ticketId}/messages?org=${orgSlug}&context=customer`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ content: message })
+        }
+      )
 
       if (!response.ok) {
         const data = await response.json()

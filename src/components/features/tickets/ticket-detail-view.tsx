@@ -8,25 +8,44 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { InsertMacroModal } from "@/components/modals/insert-macro-modal"
 import { Database } from "@/types/supabase"
+import { useParams } from "next/navigation"
+import useSWR from 'swr'
 
 type TicketStatus = Database['public']['Enums']['ticket_status']
 type TicketPriority = Database['public']['Enums']['ticket_priority']
 type SenderType = Database['public']['Enums']['sender_type']
 
+type AgentProfile = Database['public']['Tables']['agent_profiles']['Row']
+type Customer = Database['public']['Tables']['customers']['Row']
+
+type Message = Database['public']['Tables']['messages']['Row'] & {
+  sender: {
+    id: string
+    name: string
+    email: string
+  } | null
+}
+
 type TicketWithRelations = Database['public']['Tables']['tickets']['Row'] & {
-  customer: Database['public']['Tables']['customers']['Row']
-  assigned_agent: Database['public']['Tables']['agent_profiles']['Row'] | null
-  messages: Array<Database['public']['Tables']['messages']['Row'] & {
-    sender: Database['public']['Tables']['agent_profiles']['Row'] | null
-  }>
+  customer: {
+    name: string
+    email: string
+  }
+  assigned_to: Pick<AgentProfile, 'id' | 'name'> | null
+  messages: Message[]
 }
 
 interface TicketDetailViewProps {
   ticketId: string
   onBack: () => void
+  agentId: string
 }
 
-export function TicketDetailView({ ticketId, onBack }: TicketDetailViewProps) {
+const fetcher = (url: string) => fetch(url).then(r => r.json())
+
+export function TicketDetailView({ ticketId, onBack, agentId }: TicketDetailViewProps) {
+  const params = useParams()
+  const orgSlug = params.orgSlug as string
   const [ticket, setTicket] = useState<TicketWithRelations | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [status, setStatus] = useState<TicketStatus>('open')
@@ -35,47 +54,44 @@ export function TicketDetailView({ ticketId, onBack }: TicketDetailViewProps) {
   const [reply, setReply] = useState("")
   const [isMacroModalOpen, setIsMacroModalOpen] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
-  const [agents, setAgents] = useState<Array<Database['public']['Tables']['agent_profiles']['Row']>>([])
+
+  // Fetch agents for the organization
+  const { data: agentsData } = useSWR<{ agents: Array<{ id: string, name: string }> }>(
+    `/api/agents?org=${orgSlug}`,
+    fetcher
+  )
+
+  // Fetch ticket data
+  const { data: ticketData, mutate: mutateTicket } = useSWR<{ ticket: TicketWithRelations }>(
+    `/api/tickets/${ticketId}?org=${orgSlug}`,
+    fetcher
+  )
+
+  // Fetch messages
+  const { data: messagesData, mutate: mutateMessages } = useSWR<{ messages: Message[] }>(
+    `/api/tickets/${ticketId}/messages?org=${orgSlug}&context=agent&agent=${agentId}`,
+    fetcher
+  )
 
   useEffect(() => {
-    fetchTicket()
-    fetchAgents()
-  }, [ticketId])
-
-  const fetchAgents = async () => {
-    try {
-      const response = await fetch('/api/agents')
-      if (!response.ok) throw new Error('Failed to fetch agents')
-      const data = await response.json()
-      setAgents(data)
-    } catch (error) {
-      console.error('Error fetching agents:', error)
-    }
-  }
-
-  const fetchTicket = async () => {
-    try {
-      setIsLoading(true)
-      const response = await fetch(`/api/tickets/${ticketId}`)
-      if (!response.ok) throw new Error('Failed to fetch ticket')
-      const data = await response.json()
-      setTicket(data)
-      setStatus(data.status)
-      setPriority(data.priority)
-      setAssignedTo(data.assigned_to)
-    } catch (error) {
-      console.error('Error fetching ticket:', error)
-    } finally {
+    if (ticketData?.ticket) {
+      setTicket({
+        ...ticketData.ticket,
+        messages: messagesData?.messages || []
+      })
+      setStatus(ticketData.ticket.status)
+      setPriority(ticketData.ticket.priority)
+      setAssignedTo(ticketData.ticket.assigned_to?.id || null)
       setIsLoading(false)
     }
-  }
+  }, [ticketData, messagesData])
 
   const handleUpdateTicket = async () => {
     if (!ticket) return
 
     setIsSaving(true)
     try {
-      const response = await fetch(`/api/tickets/${ticketId}`, {
+      const response = await fetch(`/api/tickets/${ticketId}?org=${orgSlug}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -88,7 +104,8 @@ export function TicketDetailView({ ticketId, onBack }: TicketDetailViewProps) {
       })
 
       if (!response.ok) throw new Error('Failed to update ticket')
-      await fetchTicket()
+      
+      mutateTicket()
     } catch (error) {
       console.error('Error updating ticket:', error)
     } finally {
@@ -101,7 +118,7 @@ export function TicketDetailView({ ticketId, onBack }: TicketDetailViewProps) {
 
     setIsSaving(true)
     try {
-      const response = await fetch(`/api/tickets/${ticketId}/messages`, {
+      const response = await fetch(`/api/tickets/${ticketId}/messages?org=${orgSlug}&context=agent&agent=${agentId}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -113,8 +130,9 @@ export function TicketDetailView({ ticketId, onBack }: TicketDetailViewProps) {
       })
 
       if (!response.ok) throw new Error('Failed to send reply')
+      
       setReply("")
-      await fetchTicket()
+      mutateMessages()
     } catch (error) {
       console.error('Error sending reply:', error)
     } finally {
@@ -127,7 +145,7 @@ export function TicketDetailView({ ticketId, onBack }: TicketDetailViewProps) {
 
     setIsSaving(true)
     try {
-      const response = await fetch(`/api/tickets/${ticketId}/messages`, {
+      const response = await fetch(`/api/tickets/${ticketId}/messages?org=${orgSlug}&context=agent&agent=${agentId}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -139,8 +157,9 @@ export function TicketDetailView({ ticketId, onBack }: TicketDetailViewProps) {
       })
 
       if (!response.ok) throw new Error('Failed to add internal note')
+      
       setReply("")
-      await fetchTicket()
+      mutateMessages()
     } catch (error) {
       console.error('Error adding internal note:', error)
     } finally {
@@ -153,8 +172,8 @@ export function TicketDetailView({ ticketId, onBack }: TicketDetailViewProps) {
   }
 
   // Sort messages by creation date
-  const sortedMessages = ticket?.messages.sort((a, b) => {
-    return new Date(a.created_at!).getTime() - new Date(b.created_at!).getTime()
+  const sortedMessages = messagesData?.messages.sort((a, b) => {
+    return new Date(a.created_at || '').getTime() - new Date(b.created_at || '').getTime()
   }) || []
 
   if (isLoading) {
@@ -242,15 +261,15 @@ export function TicketDetailView({ ticketId, onBack }: TicketDetailViewProps) {
             <div>
               <p className="font-semibold">Assigned To:</p>
               <Select 
-                value={assignedTo || 'unassigned'} 
-                onValueChange={(value) => setAssignedTo(value === 'unassigned' ? null : value)}
+                value={assignedTo || ''} 
+                onValueChange={(value) => setAssignedTo(value || null)}
               >
                 <SelectTrigger className="w-[200px]">
                   <SelectValue placeholder="Select agent" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="unassigned">Unassigned</SelectItem>
-                  {agents.map((agent) => (
+                  <SelectItem value="">Unassigned</SelectItem>
+                  {agentsData?.agents.map((agent) => (
                     <SelectItem key={agent.id} value={agent.id}>
                       {agent.name}
                     </SelectItem>
@@ -269,59 +288,62 @@ export function TicketDetailView({ ticketId, onBack }: TicketDetailViewProps) {
 
       <Card>
         <CardHeader>
-          <CardTitle>Conversation History</CardTitle>
+          <CardTitle>Messages</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
             {sortedMessages.map((message) => (
-              <div
-                key={message.id}
+              <div 
+                key={message.id} 
                 className={`p-4 rounded-lg ${
                   message.is_internal 
-                    ? "bg-yellow-100 dark:bg-yellow-900/20" 
-                    : "bg-stone-100 dark:bg-stone-800"
+                    ? 'bg-yellow-50 dark:bg-yellow-900/20' 
+                    : 'bg-gray-50 dark:bg-gray-800/50'
                 }`}
               >
-                <div className="flex justify-between items-center mb-2">
-                  <span className="font-semibold">
-                    {message.sender_type === 'customer' ? ticket.customer.name : 
-                     message.sender_type === 'agent' ? message.sender?.name || 'Agent' : 
-                     'System'}
-                  </span>
-                  <span className="text-sm text-muted-foreground">
-                    {new Date(message.created_at!).toLocaleString()}
-                  </span>
+                <div className="flex justify-between items-start mb-2">
+                  <div>
+                    <p className="font-semibold">
+                      {message.sender?.name || 'System'}
+                      {message.is_internal && ' (Internal Note)'}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {new Date(message.created_at || '').toLocaleString()}
+                    </p>
+                  </div>
                 </div>
-                <p>{message.content}</p>
+                <p className="whitespace-pre-wrap">{message.content}</p>
               </div>
             ))}
           </div>
-        </CardContent>
-      </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Reply</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Textarea
-            value={reply}
-            onChange={(e) => setReply(e.target.value)}
-            placeholder="Type your reply here..."
-            className="mb-4"
-          />
-          <div className="flex justify-between">
-            <div>
-              <Button onClick={() => setIsMacroModalOpen(true)} className="mr-2">
+          <div className="mt-6 space-y-4">
+            <Textarea
+              placeholder="Type your reply..."
+              value={reply}
+              onChange={(e) => setReply(e.target.value)}
+              className="min-h-[100px]"
+            />
+            <div className="flex justify-between">
+              <Button variant="outline" onClick={() => setIsMacroModalOpen(true)}>
                 Insert Macro
               </Button>
-              <Button onClick={handleAddInternalNote} variant="outline" disabled={isSaving}>
-                Add Internal Note
-              </Button>
+              <div className="space-x-2">
+                <Button 
+                  variant="outline" 
+                  onClick={handleAddInternalNote}
+                  disabled={isSaving || !reply.trim()}
+                >
+                  Add Internal Note
+                </Button>
+                <Button 
+                  onClick={handleSendReply}
+                  disabled={isSaving || !reply.trim()}
+                >
+                  Send Reply
+                </Button>
+              </div>
             </div>
-            <Button onClick={handleSendReply} disabled={isSaving}>
-              {isSaving ? 'Sending...' : 'Send Reply'}
-            </Button>
           </div>
         </CardContent>
       </Card>

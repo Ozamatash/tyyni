@@ -3,9 +3,11 @@
 import { useState } from 'react'
 import { Dialog, DialogPanel } from '@headlessui/react'
 import { Bars3Icon, XMarkIcon } from '@heroicons/react/24/outline'
+import { useAuth } from '@clerk/nextjs'
 
-export default function HomePage() {
+export default function Home() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const { userId } = useAuth()
 
   return (
     <div className="bg-white">
@@ -28,8 +30,8 @@ export default function HomePage() {
             </button>
           </div>
           <div className="hidden lg:flex lg:flex-1 lg:justify-end">
-            <a href="/dashboard" className="text-sm font-semibold leading-6 text-gray-900">
-              Sign in to Platform <span aria-hidden="true">&rarr;</span>
+            <a href={userId ? "/select-org" : "/auth/sign-in"} className="text-sm font-semibold leading-6 text-gray-900">
+              {userId ? "Dashboard" : "Sign in to Platform"} <span aria-hidden="true">&rarr;</span>
             </a>
           </div>
         </nav>
@@ -54,10 +56,10 @@ export default function HomePage() {
               <div className="-my-6 divide-y divide-gray-500/10">
                 <div className="py-6">
                   <a
-                    href="/dashboard"
+                    href={userId ? "/select-org" : "/auth/sign-in"}
                     className="-mx-3 block rounded-lg px-3 py-2.5 text-base font-semibold leading-7 text-gray-900 hover:bg-gray-50"
                   >
-                    Sign in to Platform
+                    {userId ? "Dashboard" : "Sign in to Platform"}
                   </a>
                 </div>
               </div>

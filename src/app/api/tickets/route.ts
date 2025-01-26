@@ -1,25 +1,24 @@
 import { NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
 import { supabase } from '@/utils/supabase/server'
 
 export async function POST(req: Request) {
   try {
-    const authData = await auth()
-    const { userId, orgId: clerkOrgId } = authData
-    if (!userId || !clerkOrgId) {
-      return new NextResponse('Unauthorized', { status: 401 })
+    const { searchParams } = new URL(req.url)
+    const orgSlug = searchParams.get('org')
+    
+    if (!orgSlug) {
+      return NextResponse.json({ error: 'Organization required' }, { status: 400 })
     }
 
-    // Get Supabase organization ID
-    const { data: org, error: orgError } = await supabase
+    // Get organization ID from slug
+    const { data: org } = await supabase
       .from('organizations')
       .select('id')
-      .eq('clerk_id', clerkOrgId)
+      .eq('slug', orgSlug)
       .single()
 
-    if (orgError) {
-      console.error('Error finding organization:', orgError)
-      return new Response('Error finding organization', { status: 500 })
+    if (!org) {
+      return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
     }
 
     const body = await req.json()
@@ -37,7 +36,7 @@ export async function POST(req: Request) {
 
     if (customerError) {
       console.error('Error creating/finding customer:', customerError)
-      return new Response('Error creating customer', { status: 500 })
+      return NextResponse.json({ error: 'Error creating customer' }, { status: 500 })
     }
     
     // Create ticket with proper schema types
@@ -51,65 +50,63 @@ export async function POST(req: Request) {
       metadata: {}
     }
     
-    // Create ticket with Supabase org ID
+    // Create ticket
     const { data: ticket, error } = await supabase
       .from('tickets')
       .insert(ticketData)
-      .select()
+      .select(`
+        *,
+        customer:customers(name, email),
+        assigned_to:agent_profiles(name)
+      `)
       .single()
 
     if (error) {
       console.error('Error creating ticket:', error)
-      return new Response('Error creating ticket', { status: 500 })
+      return NextResponse.json({ error: 'Error creating ticket' }, { status: 500 })
     }
 
-    return NextResponse.json(ticket)
+    return NextResponse.json({ ticket })
   } catch (error) {
     console.error('Error:', error)
-    return new NextResponse('Internal Server Error', { status: 500 })
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
   }
 }
 
-export async function GET(request: Request) {
-  try {
-    const { searchParams } = new URL(request.url)
-    const clerkOrgId = searchParams.get('orgId')
-
-    if (!clerkOrgId) {
-      return new Response('Organization ID is required', { status: 400 })
-    }
-
-    // First get the organization's Supabase ID using the Clerk ID
-    const { data: org, error: orgError } = await supabase
-      .from('organizations')
-      .select('id')
-      .eq('clerk_id', clerkOrgId)
-      .single()
-
-    if (orgError) {
-      console.error('Error finding organization:', orgError)
-      return new Response('Error finding organization', { status: 500 })
-    }
-
-    // Now use the Supabase org ID to query tickets with relations
-    const { data: tickets, error } = await supabase
-      .from('tickets')
-      .select(`
-        *,
-        customer:customers(*),
-        assigned_agent:agent_profiles(*)
-      `)
-      .eq('organization_id', org.id)
-      .order('created_at', { ascending: false })
-
-    if (error) {
-      console.error('Error listing tickets:', error)
-      return new Response('Error listing tickets', { status: 500 })
-    }
-
-    return NextResponse.json(tickets)
-  } catch (error) {
-    console.error('Error:', error)
-    return new Response('Internal Server Error', { status: 500 })
+export async function GET(req: Request) {
+  const { searchParams } = new URL(req.url)
+  const orgSlug = searchParams.get('org')
+  
+  if (!orgSlug) {
+    return NextResponse.json({ error: 'Organization required' }, { status: 400 })
   }
+
+  // Get organization ID from slug
+  const { data: org } = await supabase
+    .from('organizations')
+    .select('id')
+    .eq('slug', orgSlug)
+    .single()
+
+  if (!org) {
+    return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
+  }
+
+  // Get tickets for organization
+  const { data: tickets, error } = await supabase
+    .from('tickets')
+    .select(`
+      *,
+      customer:customers(name, email),
+      assigned_to:agent_profiles(name)
+    `)
+    .eq('organization_id', org.id)
+    .order('created_at', { ascending: false })
+
+  if (error) {
+    console.error('Error fetching tickets:', error)
+    return NextResponse.json({ error: 'Failed to fetch tickets' }, { status: 500 })
+  }
+
+  return NextResponse.json({ tickets })
 } 

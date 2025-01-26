@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/utils/supabase/server'
-import { auth } from '@clerk/nextjs/server'
-import { Database } from '@/types/supabase'
+import type { Database } from '@/types/supabase'
+
+type AgentProfile = Database['public']['Tables']['agent_profiles']['Row']
+type Customer = Database['public']['Tables']['customers']['Row']
 
 interface SenderInfo {
   id: string
@@ -13,56 +15,36 @@ interface SenderMap {
   [key: string]: SenderInfo
 }
 
-export async function GET(request: Request, props: { params: Promise<{ ticketId: string }> }) {
-  const params = await props.params;
+export async function GET(
+  request: Request,
+  { params }: { params: { ticketId: string } }
+) {
   try {
-    const session = await auth()
-    console.log('Auth session:', { userId: session?.userId, orgId: session?.orgId })
+    const { searchParams } = new URL(request.url)
+    const orgSlug = searchParams.get('org')
 
-    const userId = session?.userId
-    const orgId = session?.orgId
-
-    if (!userId || !orgId) {
-      console.log('Unauthorized: Missing userId or orgId')
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!orgSlug) {
+      return NextResponse.json({ error: 'Organization slug is required' }, { status: 400 })
     }
 
-    // First, get the organization's UUID from Clerk ID
+    // Get organization ID from slug
     const { data: org, error: orgError } = await supabase
       .from('organizations')
       .select('id')
-      .eq('clerk_id', orgId)
+      .eq('slug', orgSlug)
       .single()
 
     if (orgError) {
-      console.log('Organization query error:', orgError)
       return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
     }
 
-    // Get agent profile using Clerk user ID and org UUID
-    const { data: agent, error: agentError } = await supabase
-      .from('agent_profiles')
-      .select('id')
-      .eq('clerk_user_id', userId)
-      .eq('organization_id', org.id)
-      .single()
-
-    if (agentError) {
-      console.log('Agent query error:', agentError)
-    }
-    console.log('Agent data:', agent)
-
-    if (!agent) {
-      return NextResponse.json({ error: 'Agent not found' }, { status: 404 })
-    }
-
-    // Fetch ticket with relations using org UUID
+    // Fetch ticket with relations
     const { data: ticket, error: ticketError } = await supabase
       .from('tickets')
       .select(`
         *,
         customer:customers(*),
-        assigned_agent:agent_profiles(*),
+        assigned_to:agent_profiles(*),
         messages(
           id,
           content,
@@ -77,7 +59,6 @@ export async function GET(request: Request, props: { params: Promise<{ ticketId:
       .single()
 
     if (ticketError) {
-      console.log('Ticket query error:', ticketError)
       return NextResponse.json({ error: 'Ticket not found' }, { status: 404 })
     }
 
@@ -124,10 +105,6 @@ export async function GET(request: Request, props: { params: Promise<{ ticketId:
       }))
     }
 
-    if (!ticket) {
-      return NextResponse.json({ error: 'Ticket not found' }, { status: 404 })
-    }
-
     return NextResponse.json({ ticket })
   } catch (error) {
     console.error('Error fetching ticket:', error)
@@ -135,47 +112,38 @@ export async function GET(request: Request, props: { params: Promise<{ ticketId:
   }
 }
 
-export async function PATCH(request: Request, props: { params: Promise<{ ticketId: string }> }) {
-  const params = await props.params;
+export async function PATCH(
+  request: Request,
+  { params }: { params: { ticketId: string } }
+) {
   try {
-    const session = await auth()
-    const userId = session?.userId
-    const orgId = session?.orgId
+    const { searchParams } = new URL(request.url)
+    const orgSlug = searchParams.get('org')
 
-    if (!userId || !orgId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!orgSlug) {
+      return NextResponse.json({ error: 'Organization slug is required' }, { status: 400 })
     }
 
-    // First, get the organization's UUID from Clerk ID
+    // Get organization ID from slug
     const { data: org, error: orgError } = await supabase
       .from('organizations')
       .select('id')
-      .eq('clerk_id', orgId)
+      .eq('slug', orgSlug)
       .single()
 
     if (orgError) {
       return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
     }
 
-    const { status } = await request.json()
+    const { status, priority, assigned_to } = await request.json()
 
-    // Get agent profile using Clerk user ID and org UUID
-    const { data: agent } = await supabase
-      .from('agent_profiles')
-      .select('id')
-      .eq('clerk_user_id', userId)
-      .eq('organization_id', org.id)
-      .single()
-
-    if (!agent) {
-      return NextResponse.json({ error: 'Agent not found' }, { status: 404 })
-    }
-
-    // Update ticket using org UUID
+    // Update ticket
     const { data: ticket, error } = await supabase
       .from('tickets')
       .update({ 
         status,
+        priority,
+        assigned_to,
         updated_at: new Date().toISOString()
       })
       .eq('id', params.ticketId)
@@ -183,7 +151,7 @@ export async function PATCH(request: Request, props: { params: Promise<{ ticketI
       .select(`
         *,
         customer:customers(*),
-        assigned_agent:agent_profiles(*),
+        assigned_to:agent_profiles(*),
         messages(
           id,
           content,

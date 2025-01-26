@@ -1,6 +1,6 @@
 import { SignUp } from "@clerk/nextjs";
 
-export default function ProductSignUpPage() {
+export default function SignUpPage() {
   return (
     <div className="flex min-h-screen items-center justify-center">
       <SignUp 
@@ -8,12 +8,12 @@ export default function ProductSignUpPage() {
           elements: {
             rootBox: "mx-auto",
             card: "bg-white dark:bg-gray-800",
+            formButtonPrimary: 'bg-black hover:bg-gray-800 text-sm normal-case',
           }
         }}
         path="/auth/sign-up"
         routing="path"
         signInUrl="/auth/sign-in"
-        afterSignUpUrl="/dashboard"
       />
     </div>
   );

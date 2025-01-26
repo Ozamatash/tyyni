@@ -89,7 +89,7 @@ export type Database = {
           expires_at: string
           last_used_at: string | null
           metadata: Json | null
-          status: Database["public"]["Enums"]["token_status"]
+          status: Database["public"]["Enums"]["token_status"] | null
           token: string
         }
         Insert: {
@@ -99,7 +99,7 @@ export type Database = {
           expires_at: string
           last_used_at?: string | null
           metadata?: Json | null
-          status?: Database["public"]["Enums"]["token_status"]
+          status?: Database["public"]["Enums"]["token_status"] | null
           token: string
         }
         Update: {
@@ -109,7 +109,7 @@ export type Database = {
           expires_at?: string
           last_used_at?: string | null
           metadata?: Json | null
-          status?: Database["public"]["Enums"]["token_status"]
+          status?: Database["public"]["Enums"]["token_status"] | null
           token?: string
         }
         Relationships: [
@@ -400,6 +400,7 @@ export type Database = {
           id: string
           name: string
           settings: Json | null
+          slug: string
           support_email: string
           updated_at: string | null
         }
@@ -409,6 +410,7 @@ export type Database = {
           id?: string
           name: string
           settings?: Json | null
+          slug: string
           support_email: string
           updated_at?: string | null
         }
@@ -418,6 +420,7 @@ export type Database = {
           id?: string
           name?: string
           settings?: Json | null
+          slug?: string
           support_email?: string
           updated_at?: string | null
         }
@@ -494,6 +497,12 @@ export type Database = {
     Functions: {
       debug_token: {
         Args: Record<PropertyKey, never>
+        Returns: string
+      }
+      generate_unique_slug: {
+        Args: {
+          name_input: string
+        }
         Returns: string
       }
       requesting_user_id: {

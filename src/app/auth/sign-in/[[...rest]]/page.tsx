@@ -8,12 +8,12 @@ export default function ProductSignInPage() {
           elements: {
             rootBox: "mx-auto",
             card: "bg-white dark:bg-gray-800",
+            formButtonPrimary: 'bg-black hover:bg-gray-800 text-sm normal-case',
           }
         }}
         path="/auth/sign-in"
         routing="path"
         signUpUrl="/auth/sign-up"
-        afterSignInUrl="/dashboard"
       />
     </div>
   );

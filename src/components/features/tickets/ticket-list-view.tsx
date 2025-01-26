@@ -6,55 +6,46 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button"
 import { CreateTicketModal } from "@/components/modals/create-ticket-modal"
 import { Database } from "@/types/supabase"
-import { useOrganization } from "@clerk/nextjs"
-import { useRouter } from "next/navigation"
+import { useRouter, useParams } from "next/navigation"
+import useSWR from 'swr'
 
 type TicketStatus = Database['public']['Enums']['ticket_status']
 type TicketPriority = Database['public']['Enums']['ticket_priority']
 
 type TicketWithRelations = Database['public']['Tables']['tickets']['Row'] & {
-  customer: Database['public']['Tables']['customers']['Row']
-  assigned_agent: Database['public']['Tables']['agent_profiles']['Row'] | null
+  customer: {
+    name: string
+    email: string
+  }
+  assigned_to: {
+    name: string
+  } | null
 }
+
+const fetcher = (url: string) => fetch(url).then(r => r.json())
 
 export function TicketListView() {
   const router = useRouter()
-  const { organization } = useOrganization()
+  const params = useParams()
+  const orgSlug = params.orgSlug as string
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [view, setView] = useState("All Open Tickets")
   const [status, setStatus] = useState<TicketStatus | "All">("All")
   const [priority, setPriority] = useState<TicketPriority | "All">("All")
   const [assignedTo, setAssignedTo] = useState("All")
-  const [tickets, setTickets] = useState<TicketWithRelations[]>([])
-  const [isLoading, setIsLoading] = useState(true)
 
-  useEffect(() => {
-    if (organization) {
-      fetchTickets()
-    }
-  }, [status, priority, assignedTo, organization])
+  // Build query params
+  const queryParams = new URLSearchParams()
+  queryParams.append("org", orgSlug)
+  if (status !== "All") queryParams.append("status", status)
+  if (priority !== "All") queryParams.append("priority", priority)
+  if (assignedTo !== "All") queryParams.append("assignedTo", assignedTo)
 
-  const fetchTickets = async () => {
-    if (!organization) return
-
-    try {
-      setIsLoading(true)
-      const params = new URLSearchParams()
-      params.append("orgId", organization.id)
-      if (status !== "All") params.append("status", status)
-      if (priority !== "All") params.append("priority", priority)
-      if (assignedTo !== "All") params.append("assignedTo", assignedTo)
-
-      const response = await fetch(`/api/tickets?${params.toString()}`)
-      if (!response.ok) throw new Error('Failed to fetch tickets')
-      const data = await response.json()
-      setTickets(data)
-    } catch (error) {
-      console.error('Error fetching tickets:', error)
-    } finally {
-      setIsLoading(false)
-    }
-  }
+  // Use SWR for data fetching
+  const { data, error, mutate } = useSWR<{ tickets: TicketWithRelations[] }>(
+    `/api/tickets?${queryParams.toString()}`,
+    fetcher
+  )
 
   const handleCreateTicket = async (data: {
     customerName: string
@@ -65,7 +56,7 @@ export function TicketListView() {
     assignedTo?: string | null
   }) => {
     try {
-      const response = await fetch('/api/tickets', {
+      const response = await fetch(`/api/tickets?org=${orgSlug}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -75,7 +66,8 @@ export function TicketListView() {
 
       if (!response.ok) throw new Error('Failed to create ticket')
       
-      await fetchTickets() // Refresh the list
+      mutate() // Refresh the list
+      setIsCreateModalOpen(false)
     } catch (error) {
       console.error('Error creating ticket:', error)
       // TODO: Show error toast
@@ -83,8 +75,14 @@ export function TicketListView() {
   }
 
   const handleSelectTicket = (id: string) => {
-    router.push(`/dashboard/tickets/${id}`)
+    router.push(`/${orgSlug}/tickets/${id}`)
   }
+
+  // Fetch agents for the organization
+  const { data: agentsData } = useSWR<{ agents: Array<{ id: string, name: string }> }>(
+    `/api/agents?org=${orgSlug}`,
+    fetcher
+  )
 
   return (
     <div className="space-y-4">
@@ -138,8 +136,11 @@ export function TicketListView() {
           <SelectContent>
             <SelectItem value="All">All Agents</SelectItem>
             <SelectItem value="unassigned">Unassigned</SelectItem>
-            <SelectItem value="alice">Alice</SelectItem>
-            <SelectItem value="bob">Bob</SelectItem>
+            {agentsData?.agents.map(agent => (
+              <SelectItem key={agent.id} value={agent.id}>
+                {agent.name}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>
@@ -156,16 +157,20 @@ export function TicketListView() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {isLoading ? (
+          {error ? (
+            <TableRow>
+              <TableCell colSpan={7} className="text-center text-red-500">Error loading tickets</TableCell>
+            </TableRow>
+          ) : !data ? (
             <TableRow>
               <TableCell colSpan={7} className="text-center">Loading tickets...</TableCell>
             </TableRow>
-          ) : tickets.length === 0 ? (
+          ) : data.tickets.length === 0 ? (
             <TableRow>
               <TableCell colSpan={7} className="text-center">No tickets found</TableCell>
             </TableRow>
           ) : (
-            tickets.map((ticket) => (
+            data.tickets.map((ticket) => (
               <TableRow 
                 key={ticket.id} 
                 className="cursor-pointer hover:bg-stone-100/50 dark:hover:bg-stone-800/50"
@@ -176,7 +181,7 @@ export function TicketListView() {
                 <TableCell>{ticket.customer.email}</TableCell>
                 <TableCell>{ticket.status}</TableCell>
                 <TableCell>{ticket.priority}</TableCell>
-                <TableCell>{ticket.assigned_agent?.name || 'Unassigned'}</TableCell>
+                <TableCell>{ticket.assigned_to?.name || 'Unassigned'}</TableCell>
                 <TableCell>{new Date(ticket.created_at!).toLocaleString()}</TableCell>
               </TableRow>
             ))
