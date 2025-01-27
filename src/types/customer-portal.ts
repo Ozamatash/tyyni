@@ -16,7 +16,11 @@ export type VerifyTokenResponse = {
   verified: boolean
   tickets?: CustomerTicket[]
   error?: string
-}
+  accessToken?: string
+} & (
+  | { verified: true; accessToken: string }
+  | { verified: false; error: string }
+)
 
 export type TokenVerificationPayload = {
   token: string
@@ -29,4 +33,5 @@ export type CustomerPortalState = {
   error?: string
   tickets: CustomerTicket[]
   selectedTicketId?: string
+  accessToken: string
 } 

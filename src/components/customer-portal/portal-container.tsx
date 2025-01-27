@@ -11,6 +11,7 @@ export function PortalContainer() {
     isVerified: false,
     isLoading: false,
     tickets: [],
+    accessToken: '',
   })
 
   const handleVerification = async (payload: TokenVerificationPayload) => {
@@ -33,6 +34,7 @@ export function PortalContainer() {
         ...prev,
         isVerified: true,
         tickets: data.tickets || [],
+        accessToken: data.accessToken,
         isLoading: false,
       }))
     } catch (error) {
@@ -68,6 +70,7 @@ export function PortalContainer() {
         <CustomerTicketDetail 
           ticketId={state.selectedTicketId}
           onBack={handleBack}
+          token={state.accessToken}
         />
       ) : (
         <TicketGrid 

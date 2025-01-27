@@ -69,7 +69,7 @@ export function TicketDetailView({ ticketId, onBack, agentId }: TicketDetailView
 
   // Fetch messages
   const { data: messagesData, mutate: mutateMessages } = useSWR<{ messages: Message[] }>(
-    `/api/tickets/${ticketId}/messages?org=${orgSlug}&context=agent&agent=${agentId}`,
+    `/api/tickets/${ticketId}/messages`,
     fetcher
   )
 
@@ -261,14 +261,14 @@ export function TicketDetailView({ ticketId, onBack, agentId }: TicketDetailView
             <div>
               <p className="font-semibold">Assigned To:</p>
               <Select 
-                value={assignedTo || ''} 
-                onValueChange={(value) => setAssignedTo(value || null)}
+                value={assignedTo || 'unassigned'} 
+                onValueChange={(value) => setAssignedTo(value === 'unassigned' ? null : value)}
               >
                 <SelectTrigger className="w-[200px]">
                   <SelectValue placeholder="Select agent" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Unassigned</SelectItem>
+                  <SelectItem value="unassigned">Unassigned</SelectItem>
                   {agentsData?.agents.map((agent) => (
                     <SelectItem key={agent.id} value={agent.id}>
                       {agent.name}

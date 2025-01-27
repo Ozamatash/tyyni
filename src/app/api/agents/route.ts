@@ -1,30 +1,27 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/utils/supabase/server'
+import { auth } from '@clerk/nextjs/server'
+import { getSupabaseOrgId } from '@/utils/organizations'
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
-    const orgSlug = searchParams.get('org')
     const self = searchParams.get('self') === 'true'
     const agentId = searchParams.get('agent')
     
-    if (!orgSlug) {
-      return NextResponse.json({ error: 'Organization required' }, { status: 400 })
+    // Get organization ID from auth
+    const { orgId: clerkOrgId, userId } = await auth()
+    if (!clerkOrgId || !userId) {
+      return NextResponse.json({ error: 'Organization access required' }, { status: 403 })
     }
 
-    // Get organization ID from slug
-    const { data: org } = await supabase
-      .from('organizations')
-      .select('id')
-      .eq('slug', orgSlug)
-      .single()
-
-    if (!org) {
+    const orgId = await getSupabaseOrgId(clerkOrgId)
+    if (!orgId) {
       return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
     }
 
     // If self=true, return current agent's details
-    if (self && agentId) {
+    if (self) {
       const { data: agent, error } = await supabase
         .from('agent_profiles')
         .select(`
@@ -34,11 +31,12 @@ export async function GET(request: Request) {
           role,
           status
         `)
-        .eq('organization_id', org.id)
-        .eq('id', agentId)
+        .eq('organization_id', orgId)
+        .eq('clerk_user_id', userId)
         .single()
 
       if (error) {
+        console.error('Agent lookup failed:', error)
         return NextResponse.json({ error: 'Agent not found' }, { status: 404 })
       }
 
@@ -56,7 +54,7 @@ export async function GET(request: Request) {
         status,
         created_at
       `)
-      .eq('organization_id', org.id)
+      .eq('organization_id', orgId)
       .order('name')
 
     if (error) {

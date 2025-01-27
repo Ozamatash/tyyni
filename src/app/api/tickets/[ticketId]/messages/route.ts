@@ -5,8 +5,12 @@ import type { Database } from '@/types/supabase'
 import { getSupabaseOrgId } from '@/utils/organizations'
 
 // Enhanced type definitions
-export type WithSender = Database['public']['Tables']['messages']['Row'] & {
-  sender: Database['public']['Tables']['agent_profiles']['Row'] | null
+type Message = Database['public']['Tables']['messages']['Row']
+type AgentProfile = Database['public']['Tables']['agent_profiles']['Row']
+type Customer = Database['public']['Tables']['customers']['Row']
+
+export type WithSender = Message & {
+  sender: AgentProfile | Customer | null
 }
 
 export type MessageInsertParams = Pick<
@@ -14,7 +18,10 @@ export type MessageInsertParams = Pick<
   'content' | 'is_internal' | 'ticket_id'
 >
 
-export async function GET(request: Request, { params }: { params: { ticketId: string } }) {
+export async function GET(
+  request: Request,
+  { params }: { params: { ticketId: string } }
+) {
   try {
     const { orgId: clerkOrgId } = await auth()
     
@@ -27,19 +34,45 @@ export async function GET(request: Request, { params }: { params: { ticketId: st
       return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
     }
 
-    const { data, error } = await supabase
+    // Get ticket ID from params
+    const { ticketId } = await params
+
+    // First get messages
+    const { data: messages, error } = await supabase
       .from('messages')
-      .select('*, sender:agent_profiles (*)')
-      .eq('ticket_id', params.ticketId)
+      .select('*')
+      .eq('ticket_id', ticketId)
       .eq('organization_id', orgId)
-      .order('created_at', { ascending: true })
-      .returns<WithSender>();
+      .order('created_at', { ascending: true });
+
     if (error) {
       console.error('Error fetching messages:', error)
       return NextResponse.json({ error: 'Failed to fetch messages' }, { status: 500 })
     }
 
-    return NextResponse.json({ messages: data })
+    // Then fetch senders in parallel
+    const messagesWithSenders = await Promise.all(messages.map(async (message) => {
+      if (message.sender_type === 'agent') {
+        const { data: sender } = await supabase
+          .from('agent_profiles')
+          .select('*')
+          .eq('id', message.sender_id)
+          .eq('organization_id', orgId)
+          .single();
+        return { ...message, sender };
+      } else if (message.sender_type === 'customer') {
+        const { data: sender } = await supabase
+          .from('customers')
+          .select('*')
+          .eq('id', message.sender_id)
+          .eq('organization_id', orgId)
+          .single();
+        return { ...message, sender };
+      }
+      return { ...message, sender: null };
+    }));
+
+    return NextResponse.json({ messages: messagesWithSenders })
   } catch (error) {
     console.error('Error:', error)
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
@@ -79,7 +112,7 @@ export async function POST(request: Request, { params }: { params: { ticketId: s
       return NextResponse.json({ error: 'Agent profile not found' }, { status: 403 })
     }
 
-    // Create message with strict type validation
+    // Create message
     const messageData: Database['public']['Tables']['messages']['Insert'] = {
       ticket_id: params.ticketId,
       organization_id: orgId,
@@ -92,8 +125,7 @@ export async function POST(request: Request, { params }: { params: { ticketId: s
     const { data: message, error: insertError } = await supabase
       .from('messages')
       .insert(messageData)
-      .select('*, sender:agent_profiles (*)')
-      .returns<WithSender>()
+      .select('*, sender:agent_profiles(*)')
       .single()
 
     if (insertError) {

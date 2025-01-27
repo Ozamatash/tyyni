@@ -13,20 +13,32 @@ import { supabase } from '@/utils/supabase/client'
 type Message = Database['public']['Tables']['messages']['Row'] & {
   sender: {
     name: string
-    email: string
+    email?: string
   } | null
+}
+
+interface Ticket {
+  id: string
+  subject: string
+  status: Database['public']['Enums']['ticket_status']
+  created_at: string | null
+  customer: {
+    id: string
+    name: string
+    email: string
+  }
+  messages: Message[]
 }
 
 interface CustomerTicketDetailProps {
   ticketId: string
   onBack: () => void
-  orgSlug: string
   token: string
 }
 
-export function CustomerTicketDetail({ ticketId, onBack, orgSlug, token }: CustomerTicketDetailProps) {
+export function CustomerTicketDetail({ ticketId, onBack, token }: CustomerTicketDetailProps) {
   const [message, setMessage] = useState("")
-  const [messages, setMessages] = useState<Message[]>([])
+  const [ticket, setTicket] = useState<Ticket>()
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string>()
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -42,26 +54,26 @@ export function CustomerTicketDetail({ ticketId, onBack, orgSlug, token }: Custo
   }
 
   useEffect(() => {
-    const fetchMessages = async () => {
+    const fetchTicket = async () => {
       try {
         const response = await fetch(
-          `/api/tickets/${ticketId}/messages?org=${orgSlug}&context=customer`,
+          `/api/customer-portal/tickets/${ticketId}`,
           {
             headers: {
-              'Authorization': `Bearer ${token}`
+              'x-customer-token': token
             }
           }
         )
         if (!response.ok) {
           const data = await response.json()
-          throw new Error(data.error || 'Failed to fetch messages')
+          throw new Error(data.error || 'Failed to fetch ticket')
         }
 
         const data = await response.json()
-        setMessages(data.messages)
+        setTicket(data.ticket)
         setTimeout(scrollToBottom, 100) // Scroll after messages are rendered
       } catch (error) {
-        console.error('Error fetching messages:', error)
+        console.error('Error fetching ticket:', error)
         setError(error instanceof Error ? error.message : 'An error occurred')
       } finally {
         setIsLoading(false)
@@ -90,18 +102,27 @@ export function CustomerTicketDetail({ ticketId, onBack, orgSlug, token }: Custo
               const newMessage = payload.new as Message
               // Only add non-internal messages
               if (!newMessage.is_internal) {
-                setMessages(prev => [...prev, newMessage])
+                setTicket(prev => prev ? {
+                  ...prev,
+                  messages: [...prev.messages, newMessage]
+                } : prev)
                 setTimeout(scrollToBottom, 100)
               }
             } else if (payload.eventType === 'DELETE') {
-              setMessages(prev => prev.filter(msg => msg.id !== payload.old.id))
+              setTicket(prev => prev ? {
+                ...prev,
+                messages: prev.messages.filter(msg => msg.id !== payload.old.id)
+              } : prev)
             } else if (payload.eventType === 'UPDATE') {
               const updatedMessage = payload.new as Message
               // Only update if message is non-internal
               if (!updatedMessage.is_internal) {
-                setMessages(prev => 
-                  prev.map(msg => msg.id === updatedMessage.id ? updatedMessage : msg)
-                )
+                setTicket(prev => prev ? {
+                  ...prev,
+                  messages: prev.messages.map(msg => 
+                    msg.id === updatedMessage.id ? updatedMessage : msg
+                  )
+                } : prev)
               }
             }
           }
@@ -109,7 +130,7 @@ export function CustomerTicketDetail({ ticketId, onBack, orgSlug, token }: Custo
         .subscribe()
     }
 
-    fetchMessages()
+    fetchTicket()
     setupRealtimeSubscription()
 
     return () => {
@@ -117,19 +138,19 @@ export function CustomerTicketDetail({ ticketId, onBack, orgSlug, token }: Custo
         channelRef.current.unsubscribe()
       }
     }
-  }, [ticketId, orgSlug, token])
+  }, [ticketId, token])
 
   const handleSend = async () => {
     if (!message.trim()) return
 
     try {
       const response = await fetch(
-        `/api/tickets/${ticketId}/messages?org=${orgSlug}&context=customer`,
+        `/api/customer-portal/tickets/${ticketId}`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
+            'x-customer-token': token
           },
           body: JSON.stringify({ content: message })
         }
@@ -170,19 +191,30 @@ export function CustomerTicketDetail({ ticketId, onBack, orgSlug, token }: Custo
     )
   }
 
+  if (!ticket) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[calc(100vh-16rem)]">
+        <p className="text-red-600 mb-4">Ticket not found</p>
+        <Button onClick={onBack}>Go Back</Button>
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col h-[calc(100vh-16rem)]">
       <div className="flex items-center gap-2 mb-6">
         <Button variant="ghost" size="icon" onClick={onBack}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
-        <h2 className="text-lg font-semibold">Ticket #{ticketId.substring(0, 8)}</h2>
+        <h2 className="text-lg font-semibold">
+          {ticket.subject} (#{ticketId.substring(0, 8)})
+        </h2>
       </div>
 
       <ScrollArea className="flex-1 pr-4">
         <div className="space-y-4">
-          {messages.map((msg, index) => {
-            const isFirstMessageOfGroup = index === 0 || messages[index - 1].sender_type !== msg.sender_type
+          {ticket.messages.map((msg, index) => {
+            const isFirstMessageOfGroup = index === 0 || ticket.messages[index - 1].sender_type !== msg.sender_type
             const showHeader = isFirstMessageOfGroup && msg.sender_type === 'agent'
             const isCustomer = msg.sender_type === 'customer'
 

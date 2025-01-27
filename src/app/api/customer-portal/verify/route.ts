@@ -106,7 +106,8 @@ export async function POST(request: Request) {
     // Create response with cookies
     const response = NextResponse.json<VerifyTokenResponse>({
       verified: true,
-      tickets: tickets
+      tickets: tickets,
+      accessToken: token
     })
 
     // Set cookies with appropriate options

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
@@ -34,16 +34,15 @@ export function TicketListView() {
   const [priority, setPriority] = useState<TicketPriority | "All">("All")
   const [assignedTo, setAssignedTo] = useState("All")
 
-  // Build query params
+  // Build query params - remove org as it's handled by Clerk auth
   const queryParams = new URLSearchParams()
-  queryParams.append("org", orgSlug)
   if (status !== "All") queryParams.append("status", status)
   if (priority !== "All") queryParams.append("priority", priority)
   if (assignedTo !== "All") queryParams.append("assignedTo", assignedTo)
 
   // Use SWR for data fetching
   const { data, error, mutate } = useSWR<{ tickets: TicketWithRelations[] }>(
-    `/api/tickets?${queryParams.toString()}`,
+    `/api/tickets${queryParams.toString() ? `?${queryParams.toString()}` : ''}`,
     fetcher
   )
 
@@ -56,7 +55,7 @@ export function TicketListView() {
     assignedTo?: string | null
   }) => {
     try {
-      const response = await fetch(`/api/tickets?org=${orgSlug}`, {
+      const response = await fetch('/api/tickets', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -78,9 +77,9 @@ export function TicketListView() {
     router.push(`/${orgSlug}/tickets/${id}`)
   }
 
-  // Fetch agents for the organization
+  // Fetch agents for the organization - remove org param as it's handled by Clerk auth
   const { data: agentsData } = useSWR<{ agents: Array<{ id: string, name: string }> }>(
-    `/api/agents?org=${orgSlug}`,
+    '/api/agents',
     fetcher
   )
 
