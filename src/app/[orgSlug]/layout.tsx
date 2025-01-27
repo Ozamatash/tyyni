@@ -1,5 +1,4 @@
 import { auth } from '@clerk/nextjs/server'
-import { supabase } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
 import { DashboardSidebar } from "@/components/layouts/dashboard/dashboard-sidebar"
 import { DashboardTopBar } from "@/components/layouts/dashboard/dashboard-top-bar"
@@ -7,21 +6,12 @@ import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 
 export default async function OrganizationLayout({
   children,
-  params,
 }: {
   children: React.ReactNode
-  params: { orgSlug: string }
 }) {
-  const { userId, orgId, orgRole } = await auth()
+  const { orgId, orgRole } = await auth()
   
-  // Get organization details
-  const { data: org } = await supabase
-    .from('organizations')
-    .select('*')
-    .eq('slug', params.orgSlug)
-    .single()
-
-  if (!org || org.clerk_id !== orgId) {
+  if (!orgId) {
     redirect('/select-org')
   }
 

@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
+import { auth } from '@clerk/nextjs/server'
 import { supabase } from '@/utils/supabase/server'
 import type { Database } from '@/types/supabase'
+import { getSupabaseOrgId } from '@/utils/organizations'
 
 type AgentProfile = Database['public']['Tables']['agent_profiles']['Row']
 type Customer = Database['public']['Tables']['customers']['Row']
@@ -20,21 +22,14 @@ export async function GET(
   { params }: { params: { ticketId: string } }
 ) {
   try {
-    const { searchParams } = new URL(request.url)
-    const orgSlug = searchParams.get('org')
-
-    if (!orgSlug) {
-      return NextResponse.json({ error: 'Organization slug is required' }, { status: 400 })
+    const { orgId: clerkOrgId } = await auth()
+    
+    if (!clerkOrgId) {
+      return NextResponse.json({ error: 'Organization access required' }, { status: 403 })
     }
 
-    // Get organization ID from slug
-    const { data: org, error: orgError } = await supabase
-      .from('organizations')
-      .select('id')
-      .eq('slug', orgSlug)
-      .single()
-
-    if (orgError) {
+    const orgId = await getSupabaseOrgId(clerkOrgId)
+    if (!orgId) {
       return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
     }
 
@@ -55,7 +50,7 @@ export async function GET(
         )
       `)
       .eq('id', params.ticketId)
-      .eq('organization_id', org.id)
+      .eq('organization_id', orgId)
       .single()
 
     if (ticketError) {
@@ -117,21 +112,14 @@ export async function PATCH(
   { params }: { params: { ticketId: string } }
 ) {
   try {
-    const { searchParams } = new URL(request.url)
-    const orgSlug = searchParams.get('org')
-
-    if (!orgSlug) {
-      return NextResponse.json({ error: 'Organization slug is required' }, { status: 400 })
+    const { orgId: clerkOrgId } = await auth()
+    
+    if (!clerkOrgId) {
+      return NextResponse.json({ error: 'Organization access required' }, { status: 403 })
     }
 
-    // Get organization ID from slug
-    const { data: org, error: orgError } = await supabase
-      .from('organizations')
-      .select('id')
-      .eq('slug', orgSlug)
-      .single()
-
-    if (orgError) {
+    const orgId = await getSupabaseOrgId(clerkOrgId)
+    if (!orgId) {
       return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
     }
 
@@ -147,7 +135,7 @@ export async function PATCH(
         updated_at: new Date().toISOString()
       })
       .eq('id', params.ticketId)
-      .eq('organization_id', org.id)
+      .eq('organization_id', orgId)
       .select(`
         *,
         customer:customers(*),

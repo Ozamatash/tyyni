@@ -2,18 +2,28 @@ import { NextResponse } from 'next/server'
 import { supabase } from '@/utils/supabase/server'
 import { nanoid } from 'nanoid'
 import { Database } from '@/types/supabase'
+import { getOrgIdFromEmail } from '@/utils/organizations'
 
 type Customer = Database['public']['Tables']['customers']['Row']
 
 export async function POST(req: Request) {
   try {
-    const { email, name, subject, message } = await req.json()
+    const { email, name, subject, message, supportEmail } = await req.json()
 
     // Validate input
-    if (!email || !name || !subject || !message) {
+    if (!email || !name || !subject || !message || !supportEmail) {
       return NextResponse.json(
         { error: 'Missing required fields' },
         { status: 400 }
+      )
+    }
+
+    // Get organization from support email
+    const orgId = await getOrgIdFromEmail(supportEmail)
+    if (!orgId) {
+      return NextResponse.json(
+        { error: 'Invalid support email' },
+        { status: 404 }
       )
     }
 
@@ -22,6 +32,7 @@ export async function POST(req: Request) {
       .from('customers')
       .select()
       .eq('email', email)
+      .eq('organization_id', orgId)
       .single()
 
     if (customerError && customerError.code !== 'PGRST116') { // PGRST116 is "not found"
@@ -40,8 +51,7 @@ export async function POST(req: Request) {
         .insert({
           email,
           name,
-          // For testing, we'll use a hardcoded organization_id
-          organization_id: 'd6707a28-4f14-4ab9-bbb1-87dbe819ee0a'
+          organization_id: orgId
         })
         .select()
         .single()
@@ -65,7 +75,7 @@ export async function POST(req: Request) {
         subject,
         status: 'open',
         priority: 'normal',
-        organization_id: 'd6707a28-4f14-4ab9-bbb1-87dbe819ee0a'
+        organization_id: orgId
       })
       .select()
       .single()
@@ -86,7 +96,7 @@ export async function POST(req: Request) {
         sender_type: 'customer',
         sender_id: customerId,
         content: message,
-        organization_id: 'd6707a28-4f14-4ab9-bbb1-87dbe819ee0a',
+        organization_id: orgId,
         is_internal: false
       })
 

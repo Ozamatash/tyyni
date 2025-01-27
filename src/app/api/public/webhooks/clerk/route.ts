@@ -52,6 +52,7 @@ export async function POST(req: Request) {
       .insert({
         clerk_id: org.id,
         name: org.name,
+        slug: org.slug || org.name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
         support_email: `support@${org.name.toLowerCase().replace(/[^a-z0-9]/g, '')}.com`, // Default support email
         created_at: new Date(org.created_at).toISOString(),
       })

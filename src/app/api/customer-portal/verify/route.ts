@@ -50,6 +50,21 @@ export async function POST(request: Request) {
       }, { status: 401 })
     }
 
+    // Get customer's organization ID
+    const { data: customer, error: customerError } = await supabase
+      .from('customers')
+      .select('organization_id')
+      .eq('id', tokenData.customer_id)
+      .single()
+
+    if (customerError || !customer) {
+      console.error('Error fetching customer:', customerError)
+      return NextResponse.json<VerifyTokenResponse>({
+        verified: false,
+        error: 'Customer not found'
+      }, { status: 404 })
+    }
+
     // Fetch customer's tickets with their messages
     const { data: tickets, error: ticketsError } = await supabase
       .from('tickets')
@@ -70,6 +85,7 @@ export async function POST(request: Request) {
         )
       `)
       .eq('customer_id', tokenData.customer_id)
+      .eq('organization_id', customer.organization_id)
       .order('created_at', { ascending: false })
       .limit(10) // Limit to 10 most recent tickets initially
 

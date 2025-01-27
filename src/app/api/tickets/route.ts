@@ -1,23 +1,19 @@
 import { NextResponse } from 'next/server'
+import { auth } from '@clerk/nextjs/server'
 import { supabase } from '@/utils/supabase/server'
+import type { Database } from '@/types/supabase'
+import { getSupabaseOrgId } from '@/utils/organizations'
 
 export async function POST(req: Request) {
   try {
-    const { searchParams } = new URL(req.url)
-    const orgSlug = searchParams.get('org')
+    const { orgId: clerkOrgId } = await auth()
     
-    if (!orgSlug) {
-      return NextResponse.json({ error: 'Organization required' }, { status: 400 })
+    if (!clerkOrgId) {
+      return NextResponse.json({ error: 'Organization access required' }, { status: 403 })
     }
 
-    // Get organization ID from slug
-    const { data: org } = await supabase
-      .from('organizations')
-      .select('id')
-      .eq('slug', orgSlug)
-      .single()
-
-    if (!org) {
+    const orgId = await getSupabaseOrgId(clerkOrgId)
+    if (!orgId) {
       return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
     }
 
@@ -29,7 +25,7 @@ export async function POST(req: Request) {
       .upsert({
         email: body.customerEmail,
         name: body.customerName,
-        organization_id: org.id,
+        organization_id: orgId,
       })
       .select()
       .single()
@@ -40,16 +36,16 @@ export async function POST(req: Request) {
     }
     
     // Create ticket with proper schema types
-    const ticketData = {
+    const ticketData: Database['public']['Tables']['tickets']['Insert'] = {
       subject: body.subject,
-      organization_id: org.id,
+      organization_id: orgId,
       customer_id: customer.id,
       status: body.status,
       priority: body.priority,
       assigned_to: body.assignedTo || null,
       metadata: {}
     }
-    
+
     // Create ticket
     const { data: ticket, error } = await supabase
       .from('tickets')
@@ -74,39 +70,37 @@ export async function POST(req: Request) {
 }
 
 export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url)
-  const orgSlug = searchParams.get('org')
-  
-  if (!orgSlug) {
-    return NextResponse.json({ error: 'Organization required' }, { status: 400 })
+  try {
+    const { orgId: clerkOrgId } = await auth()
+    
+    if (!clerkOrgId) {
+      return NextResponse.json({ error: 'Organization access required' }, { status: 403 })
+    }
+
+    const orgId = await getSupabaseOrgId(clerkOrgId)
+    if (!orgId) {
+      return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
+    }
+
+    // Get tickets for organization
+    const { data: tickets, error } = await supabase
+      .from('tickets')
+      .select(`
+        *,
+        customer:customers(name, email),
+        assigned_to:agent_profiles(name)
+      `)
+      .eq('organization_id', orgId)
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.error('Error fetching tickets:', error)
+      return NextResponse.json({ error: 'Failed to fetch tickets' }, { status: 500 })
+    }
+
+    return NextResponse.json({ tickets })
+  } catch (error) {
+    console.error('Error:', error)
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
   }
-
-  // Get organization ID from slug
-  const { data: org } = await supabase
-    .from('organizations')
-    .select('id')
-    .eq('slug', orgSlug)
-    .single()
-
-  if (!org) {
-    return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
-  }
-
-  // Get tickets for organization
-  const { data: tickets, error } = await supabase
-    .from('tickets')
-    .select(`
-      *,
-      customer:customers(name, email),
-      assigned_to:agent_profiles(name)
-    `)
-    .eq('organization_id', org.id)
-    .order('created_at', { ascending: false })
-
-  if (error) {
-    console.error('Error fetching tickets:', error)
-    return NextResponse.json({ error: 'Failed to fetch tickets' }, { status: 500 })
-  }
-
-  return NextResponse.json({ tickets })
 } 
