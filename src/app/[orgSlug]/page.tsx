@@ -1,13 +1,14 @@
 import { auth } from "@clerk/nextjs/server"
 import { redirect } from "next/navigation"
 
-export default async function OrganizationPage({
-  params,
-}: {
-  params: { orgSlug: string }
-}) {
+export default async function OrganizationPage(
+  props: {
+    params: Promise<{ orgSlug: string }>
+  }
+) {
+  const params = await props.params;
   const { userId, orgId, orgRole } = await auth()
-  
+
   // If not logged in, redirect to sign in
   if (!userId) {
     redirect("/auth/sign-in")

@@ -17,10 +17,8 @@ interface SenderMap {
   [key: string]: SenderInfo
 }
 
-export async function GET(
-  request: Request,
-  { params }: { params: { ticketId: string } }
-) {
+export async function GET(request: Request, props: { params: Promise<{ ticketId: string }> }) {
+  const params = await props.params;
   try {
     const { orgId: clerkOrgId } = await auth()
     
@@ -107,10 +105,8 @@ export async function GET(
   }
 }
 
-export async function PATCH(
-  request: Request,
-  { params }: { params: { ticketId: string } }
-) {
+export async function PATCH(request: Request, props: { params: Promise<{ ticketId: string }> }) {
+  const params = await props.params;
   try {
     const { orgId: clerkOrgId } = await auth()
     

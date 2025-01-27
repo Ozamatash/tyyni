@@ -17,10 +17,8 @@ interface TicketWithMessages {
   })[]
 }
 
-export async function GET(
-  request: Request,
-  { params }: { params: { ticketId: string } }
-) {
+export async function GET(request: Request, props: { params: Promise<{ ticketId: string }> }) {
+  const params = await props.params;
   const { ticketId } = params
   try {
     // Get customer token from header
@@ -108,10 +106,8 @@ export async function GET(
   }
 }
 
-export async function POST(
-  request: Request,
-  { params }: { params: { ticketId: string } }
-) {
+export async function POST(request: Request, props: { params: Promise<{ ticketId: string }> }) {
+  const params = await props.params;
   const { ticketId } = params
   try {
     // Get customer token from header

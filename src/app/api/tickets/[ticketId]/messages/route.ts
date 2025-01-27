@@ -79,7 +79,8 @@ export async function GET(
   }
 }
 
-export async function POST(request: Request, { params }: { params: { ticketId: string } }) {
+export async function POST(request: Request, props: { params: Promise<{ ticketId: string }> }) {
+  const params = await props.params;
   try {
     const { orgId: clerkOrgId, userId } = await auth()
     

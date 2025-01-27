@@ -57,13 +57,13 @@ export function TicketDetailView({ ticketId, onBack, agentId }: TicketDetailView
 
   // Fetch agents for the organization
   const { data: agentsData } = useSWR<{ agents: Array<{ id: string, name: string }> }>(
-    `/api/agents?org=${orgSlug}`,
+    '/api/agents',
     fetcher
   )
 
   // Fetch ticket data
   const { data: ticketData, mutate: mutateTicket } = useSWR<{ ticket: TicketWithRelations }>(
-    `/api/tickets/${ticketId}?org=${orgSlug}`,
+    `/api/tickets/${ticketId}`,
     fetcher
   )
 
@@ -91,7 +91,7 @@ export function TicketDetailView({ ticketId, onBack, agentId }: TicketDetailView
 
     setIsSaving(true)
     try {
-      const response = await fetch(`/api/tickets/${ticketId}?org=${orgSlug}`, {
+      const response = await fetch(`/api/tickets/${ticketId}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -118,7 +118,7 @@ export function TicketDetailView({ ticketId, onBack, agentId }: TicketDetailView
 
     setIsSaving(true)
     try {
-      const response = await fetch(`/api/tickets/${ticketId}/messages?org=${orgSlug}&context=agent&agent=${agentId}`, {
+      const response = await fetch(`/api/tickets/${ticketId}/messages`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -145,7 +145,7 @@ export function TicketDetailView({ ticketId, onBack, agentId }: TicketDetailView
 
     setIsSaving(true)
     try {
-      const response = await fetch(`/api/tickets/${ticketId}/messages?org=${orgSlug}&context=agent&agent=${agentId}`, {
+      const response = await fetch(`/api/tickets/${ticketId}/messages`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
