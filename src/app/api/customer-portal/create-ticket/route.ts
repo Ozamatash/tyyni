@@ -1,64 +1,63 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/utils/supabase/server'
 import { nanoid } from 'nanoid'
-import { Database } from '@/types/supabase'
-import { getOrgIdFromEmail } from '@/utils/organizations'
-import { sendTicketNotification } from '@/utils/email'
 
-type Customer = Database['public']['Tables']['customers']['Row']
+interface CreateTicketRequest {
+  email: string
+  name: string
+  subject: string
+  message: string
+  organizationId: string
+}
 
 export async function POST(req: Request) {
   try {
-    const { email, name, subject, message, supportEmail } = await req.json()
+    const { email, name, subject, message, organizationId }: CreateTicketRequest = await req.json()
+
+    // Get base URL from the request
+    const url = new URL(req.url)
+    const baseUrl = `${url.protocol}//${url.host}`
 
     // Validate input
-    if (!email || !name || !subject || !message || !supportEmail) {
+    if (!email || !name || !subject || !message || !organizationId) {
       return NextResponse.json(
         { error: 'Missing required fields' },
         { status: 400 }
       )
     }
 
-    // Get organization from support email
-    const orgId = await getOrgIdFromEmail(supportEmail)
-    if (!orgId) {
-      return NextResponse.json(
-        { error: 'Invalid support email' },
-        { status: 404 }
-      )
-    }
-
-    // Get organization slug for email
-    const { data: org } = await supabase
+    // Validate organization exists
+    const { data: org, error: orgError } = await supabase
       .from('organizations')
-      .select('slug')
-      .eq('id', orgId)
+      .select('id')
+      .eq('id', organizationId)
       .single()
 
-    if (!org?.slug) {
+    if (orgError || !org) {
+      console.error('Organization validation error:', orgError)
       return NextResponse.json(
-        { error: 'Organization not found' },
-        { status: 404 }
+        { error: 'Invalid organization' },
+        { status: 400 }
       )
     }
 
-    // Start a transaction
+    // Check if customer exists
     const { data: customer, error: customerError } = await supabase
       .from('customers')
       .select()
       .eq('email', email)
-      .eq('organization_id', orgId)
+      .eq('organization_id', organizationId)
       .single()
 
-    if (customerError && customerError.code !== 'PGRST116') { // PGRST116 is "not found"
-      console.error('Error fetching customer:', customerError)
+    if (customerError && customerError.code !== 'PGRST116') {
+      console.error('Customer lookup error:', customerError)
       return NextResponse.json(
-        { error: 'Error processing request' },
+        { error: 'Error checking customer' },
         { status: 500 }
       )
     }
 
-    // If customer doesn't exist, create them
+    // Create or use existing customer
     let customerId = customer?.id
     if (!customerId) {
       const { data: newCustomer, error: createError } = await supabase
@@ -66,23 +65,24 @@ export async function POST(req: Request) {
         .insert({
           email,
           name,
-          organization_id: orgId
+          organization_id: organizationId,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
         })
         .select()
         .single()
 
       if (createError) {
-        console.error('Error creating customer:', createError)
+        console.error('Customer creation error:', createError)
         return NextResponse.json(
           { error: 'Error creating customer' },
           { status: 500 }
         )
       }
-
       customerId = newCustomer.id
     }
 
-    // Create the ticket
+    // Create ticket
     const { data: ticket, error: ticketError } = await supabase
       .from('tickets')
       .insert({
@@ -90,20 +90,20 @@ export async function POST(req: Request) {
         subject,
         status: 'open',
         priority: 'normal',
-        organization_id: orgId
+        organization_id: organizationId
       })
       .select()
       .single()
 
     if (ticketError) {
-      console.error('Error creating ticket:', ticketError)
+      console.error('Ticket creation error:', ticketError)
       return NextResponse.json(
         { error: 'Error creating ticket' },
         { status: 500 }
       )
     }
 
-    // Create the initial message
+    // Create initial message
     const { error: messageError } = await supabase
       .from('messages')
       .insert({
@@ -111,12 +111,12 @@ export async function POST(req: Request) {
         sender_type: 'customer',
         sender_id: customerId,
         content: message,
-        organization_id: orgId,
+        organization_id: organizationId,
         is_internal: false
       })
 
     if (messageError) {
-      console.error('Error creating message:', messageError)
+      console.error('Message creation error:', messageError)
       return NextResponse.json(
         { error: 'Error creating message' },
         { status: 500 }
@@ -124,7 +124,7 @@ export async function POST(req: Request) {
     }
 
     // Generate and store access token
-    const token = nanoid(32) // Generate a secure token
+    const token = nanoid(32)
     const { error: tokenError } = await supabase
       .from('customer_access_tokens')
       .insert({
@@ -132,11 +132,11 @@ export async function POST(req: Request) {
         customer_id: customerId,
         email,
         status: 'active',
-        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() // 7 days
+        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
       })
 
     if (tokenError) {
-      console.error('Error creating token:', tokenError)
+      console.error('Token creation error:', tokenError)
       return NextResponse.json(
         { error: 'Error creating access token' },
         { status: 500 }
@@ -144,34 +144,31 @@ export async function POST(req: Request) {
     }
 
     // Send initial access email
-    try {
-      const portalUrl = `${process.env.NEXT_PUBLIC_PORTAL_URL}/verify?token=${token}`
-      await sendTicketNotification({
-        to: email,
-        orgSlug: org.slug,
+    const emailResponse = await fetch(`${baseUrl}/api/customer-portal/send-notification`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
         ticketId: ticket.id,
+        email,
+        name,
         subject,
-        customerName: name,
-        portalUrl
+        token
       })
-    } catch (emailError) {
-      console.error('Failed to send email notification:', emailError)
-      // Since this is the initial access email, we should fail the request
-      // Otherwise the customer won't get their access link
-      await supabase
-        .from('customer_access_tokens')
-        .delete()
-        .eq('token', token)
-      
+    })
+
+    if (!emailResponse.ok) {
+      console.error('Email sending error:', await emailResponse.text())
       return NextResponse.json(
         { error: 'Failed to send access email' },
         { status: 500 }
       )
     }
 
-    return NextResponse.json({ token })
+    return NextResponse.json({ success: true, token })
   } catch (error) {
-    console.error('Error processing request:', error)
+    console.error('Error in create ticket route:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

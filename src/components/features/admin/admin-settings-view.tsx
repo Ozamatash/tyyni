@@ -55,64 +55,42 @@ export function AdminSettingsView() {
                   Email Settings
                 </CardTitle>
                 <CardDescription>
-                  Configure email integration settings
+                  Your organization's support email and portal settings
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <Label>Support Email Address</Label>
-                    <Input placeholder="support@yourcompany.com" />
+                    <Input 
+                      value={`${organization?.slug}@tyynisupport.com`}
+                      readOnly
+                    />
+                    <p className="text-sm text-muted-foreground">
+                      This is your organization's dedicated support email address
+                    </p>
                   </div>
                   
                   <div className="space-y-2">
-                    <Label>SMTP Server</Label>
-                    <Input placeholder="smtp.yourcompany.com" />
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>SMTP Port</Label>
-                      <Input type="number" placeholder="587" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Encryption</Label>
-                      <Select>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select encryption" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="tls">TLS</SelectItem>
-                          <SelectItem value="ssl">SSL</SelectItem>
-                          <SelectItem value="none">None</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label>SMTP Username</Label>
-                    <Input />
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label>SMTP Password</Label>
-                    <Input type="password" />
+                    <Label>Customer Portal URL</Label>
+                    <Input 
+                      value={`${process.env.NEXT_PUBLIC_PORTAL_URL}/${organization?.slug}`}
+                      readOnly
+                    />
+                    <p className="text-sm text-muted-foreground">
+                      Share this URL with your customers to access their support tickets
+                    </p>
                   </div>
 
-                  <div className="flex items-center space-x-2 pt-2">
-                    <Switch id="auto-reply" />
-                    <Label htmlFor="auto-reply">Enable Auto-Reply</Label>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="email-notifications">Email Notifications</Label>
+                      <Switch id="email-notifications" defaultChecked />
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Send email notifications to customers when tickets are created or updated
+                    </p>
                   </div>
-                </div>
-
-                <div className="flex justify-end space-x-2 pt-4">
-                  <Button variant="outline">
-                    Test Connection
-                  </Button>
-                  <Button>
-                    Save Changes
-                  </Button>
                 </div>
               </CardContent>
             </Card>
