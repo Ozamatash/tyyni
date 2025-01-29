@@ -61,36 +61,36 @@ export function DashboardSidebar() {
       </div>
 
       <nav className="grid gap-1">
-        <Link href={`/${organization.slug}/tickets`} passHref>
+        <Link href="/dashboard/tickets" passHref>
           <Button
             variant="ghost"
             className={cn(
               "w-full justify-start",
-              pathname === `/${organization.slug}/tickets` && "bg-muted"
+              pathname === "/dashboard/tickets" && "bg-muted"
             )}
           >
             <Ticket className="mr-2 h-4 w-4" />
             Tickets
           </Button>
         </Link>
-        <Link href={`/${organization.slug}/reports`} passHref>
+        <Link href="/dashboard/reports" passHref>
           <Button
             variant="ghost"
             className={cn(
               "w-full justify-start",
-              pathname === `/${organization.slug}/reports` && "bg-muted"
+              pathname === "/dashboard/reports" && "bg-muted"
             )}
           >
             <BarChart3 className="mr-2 h-4 w-4" />
             Reports
           </Button>
         </Link>
-        <Link href={`/${organization.slug}/settings`} passHref>
+        <Link href="/dashboard/settings" passHref>
           <Button
             variant="ghost"
             className={cn(
               "w-full justify-start",
-              pathname === `/${organization.slug}/settings` && "bg-muted"
+              pathname === "/dashboard/settings" && "bg-muted"
             )}
           >
             <Settings className="mr-2 h-4 w-4" />
@@ -98,12 +98,12 @@ export function DashboardSidebar() {
           </Button>
         </Link>
         {isAdmin && (
-          <Link href={`/${organization.slug}/admin`} passHref>
+          <Link href="/dashboard/admin" passHref>
             <Button
               variant="ghost"
               className={cn(
                 "w-full justify-start",
-                pathname === `/${organization.slug}/admin` && "bg-muted"
+                pathname === "/dashboard/admin" && "bg-muted"
               )}
             >
               <Shield className="mr-2 h-4 w-4" />

@@ -2,7 +2,6 @@
 
 import { OrganizationList, useAuth, useOrganization } from "@clerk/nextjs"
 import { useRouter } from "next/navigation"
-import { supabase } from "@/utils/supabase/client"
 import { useEffect } from "react"
 
 export default function SelectOrganizationPage() {
@@ -21,17 +20,9 @@ export default function SelectOrganizationPage() {
         return
       }
 
-      // If user has an org selected, check for slug and redirect
+      // If user has an org selected, redirect to dashboard
       if (isOrgLoaded && organization) {
-        const { data: org } = await supabase
-          .from('organizations')
-          .select('slug')
-          .eq('clerk_id', organization.id)
-          .single()
-          
-        if (org) {
-          router.push(`/${org.slug}/tickets`)
-        }
+        router.push('/dashboard/tickets')
       }
     }
 
@@ -42,8 +33,8 @@ export default function SelectOrganizationPage() {
     <div className="flex min-h-screen items-center justify-center">
       <OrganizationList
         hidePersonal
-        afterSelectOrganizationUrl="/:slug/tickets"
-        afterCreateOrganizationUrl="/:slug/tickets"
+        afterSelectOrganizationUrl="/dashboard/tickets"
+        afterCreateOrganizationUrl="/dashboard/tickets"
       />
     </div>
   )

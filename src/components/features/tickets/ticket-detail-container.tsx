@@ -1,6 +1,6 @@
 'use client'
 
-import { useRouter, useParams } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { TicketDetailView } from '@/components/features/tickets/ticket-detail-view'
 import useSWR from 'swr'
 
@@ -13,8 +13,6 @@ const fetcher = (url: string) => fetch(url).then(r => r.json())
 
 export function TicketDetailContainer({ ticketId, organizationId }: TicketDetailContainerProps) {
   const router = useRouter()
-  const params = useParams()
-  const orgSlug = params.orgSlug as string
 
   const { data: agentData } = useSWR(
     `/api/agents?self=true`,
@@ -22,7 +20,7 @@ export function TicketDetailContainer({ ticketId, organizationId }: TicketDetail
   )
 
   const handleBack = () => {
-    router.push(`/${orgSlug}/tickets`)
+    router.push('/dashboard/tickets')
   }
 
   if (!agentData?.agent) {

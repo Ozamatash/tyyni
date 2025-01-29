@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button"
 import { CreateTicketModal } from "@/components/modals/create-ticket-modal"
 import { Database } from "@/types/supabase"
-import { useRouter, useParams } from "next/navigation"
+import { useRouter } from "next/navigation"
 import useSWR from 'swr'
 
 type TicketStatus = Database['public']['Enums']['ticket_status']
@@ -22,28 +22,55 @@ type TicketWithRelations = Database['public']['Tables']['tickets']['Row'] & {
   } | null
 }
 
-const fetcher = (url: string) => fetch(url).then(r => r.json())
+const fetcher = async (url: string) => {
+  try {
+    const res = await fetch(url)
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}))
+      throw new Error(
+        errorData.error || `HTTP error! status: ${res.status}`
+      )
+    }
+    const data = await res.json()
+    if (!data) throw new Error('No data received')
+    return data
+  } catch (error) {
+    console.error('Fetch error:', error)
+    throw error
+  }
+}
 
 export function TicketListView() {
   const router = useRouter()
-  const params = useParams()
-  const orgSlug = params.orgSlug as string
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [view, setView] = useState("All Open Tickets")
   const [status, setStatus] = useState<TicketStatus | "All">("All")
   const [priority, setPriority] = useState<TicketPriority | "All">("All")
   const [assignedTo, setAssignedTo] = useState("All")
 
-  // Build query params - remove org as it's handled by Clerk auth
+  // Build query params
   const queryParams = new URLSearchParams()
+  if (view === "All Unassigned") queryParams.append("unassigned", "true")
+  if (view === "My Open Tickets") queryParams.append("myTickets", "true")
+  if (view === "Recently Solved") queryParams.append("recentlySolved", "true")
   if (status !== "All") queryParams.append("status", status)
   if (priority !== "All") queryParams.append("priority", priority)
-  if (assignedTo !== "All") queryParams.append("assignedTo", assignedTo)
+  if (assignedTo !== "All") {
+    if (assignedTo === "unassigned") {
+      queryParams.append("unassigned", "true")
+    } else {
+      queryParams.append("assignedTo", assignedTo)
+    }
+  }
 
-  // Use SWR for data fetching
-  const { data, error, mutate } = useSWR<{ tickets: TicketWithRelations[] }>(
+  // Use SWR for data fetching with proper query string
+  const { data, error, mutate, isLoading } = useSWR<{ tickets: TicketWithRelations[] }>(
     `/api/tickets${queryParams.toString() ? `?${queryParams.toString()}` : ''}`,
-    fetcher
+    fetcher,
+    { 
+      refreshInterval: 30000, // Refresh every 30 seconds
+      keepPreviousData: true
+    }
   )
 
   const handleCreateTicket = async (data: {
@@ -74,7 +101,7 @@ export function TicketListView() {
   }
 
   const handleSelectTicket = (id: string) => {
-    router.push(`/${orgSlug}/tickets/${id}`)
+    router.push(`/dashboard/tickets/${id}`)
   }
 
   // Fetch agents for the organization - remove org param as it's handled by Clerk auth
@@ -84,7 +111,7 @@ export function TicketListView() {
   )
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 p-6">
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold">Tickets</h1>
         <Button onClick={() => setIsCreateModalOpen(true)}>Create Ticket</Button>
@@ -158,13 +185,15 @@ export function TicketListView() {
         <TableBody>
           {error ? (
             <TableRow>
-              <TableCell colSpan={7} className="text-center text-red-500">Error loading tickets</TableCell>
+              <TableCell colSpan={7} className="text-center text-red-500">
+                Error loading tickets: {error.message}
+              </TableCell>
             </TableRow>
-          ) : !data ? (
+          ) : isLoading ? (
             <TableRow>
               <TableCell colSpan={7} className="text-center">Loading tickets...</TableCell>
             </TableRow>
-          ) : data.tickets.length === 0 ? (
+          ) : !data?.tickets?.length ? (
             <TableRow>
               <TableCell colSpan={7} className="text-center">No tickets found</TableCell>
             </TableRow>

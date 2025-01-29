@@ -6,13 +6,12 @@ import { notFound } from 'next/navigation'
 interface TicketPageProps {
   params: Promise<{
     ticketId: string
-    orgSlug: string
   }>
 }
 
 export default async function TicketPage({ params }: TicketPageProps) {
   // Await dynamic route parameters
-  const { ticketId, orgSlug } = await params
+  const { ticketId, } = await params
   
   // Validate auth and org access first
   const { orgId: clerkOrgId } = await auth()
@@ -28,7 +27,7 @@ export default async function TicketPage({ params }: TicketPageProps) {
   }
 
   return (
-    <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
+    <div className="flex-1">
       <TicketDetailContainer 
         ticketId={ticketId}
         organizationId={orgId}

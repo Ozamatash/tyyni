@@ -26,7 +26,7 @@ export default async function OrganizationLayout({
         <DashboardSidebar />
         <SidebarInset className="flex flex-col flex-1 w-full">
           <DashboardTopBar />
-          <main className="flex-1 overflow-y-auto p-6 w-full">
+          <main className="flex-1 overflow-y-auto w-full">
             {children}
           </main>
         </SidebarInset>

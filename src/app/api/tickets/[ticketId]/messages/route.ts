@@ -126,12 +126,24 @@ export async function POST(request: Request, props: { params: Promise<{ ticketId
     const { data: message, error: insertError } = await supabase
       .from('messages')
       .insert(messageData)
-      .select('*, sender:agent_profiles(*)')
+      .select('*')
       .single()
 
     if (insertError) {
       console.error('Message creation failed:', insertError)
       return NextResponse.json({ error: 'Failed to create message' }, { status: 500 })
+    }
+
+    // Fetch sender information separately
+    const { data: sender } = await supabase
+      .from('agent_profiles')
+      .select('id, name')
+      .eq('id', agentProfile.id)
+      .single()
+
+    const messageWithSender = {
+      ...message,
+      sender
     }
 
     // Update ticket activity
@@ -148,7 +160,7 @@ export async function POST(request: Request, props: { params: Promise<{ ticketId
       console.error('Ticket update failed:', updateError)
     }
 
-    return NextResponse.json({ message })
+    return NextResponse.json({ message: messageWithSender })
   } catch (error) {
     console.error('Error:', error)
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })

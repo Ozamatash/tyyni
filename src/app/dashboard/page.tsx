@@ -6,7 +6,6 @@ export default async function OrganizationPage(
     params: Promise<{ orgSlug: string }>
   }
 ) {
-  const params = await props.params;
   const { userId, orgId, orgRole } = await auth()
 
   // If not logged in, redirect to sign in
@@ -25,5 +24,5 @@ export default async function OrganizationPage(
   }
 
   // Redirect to tickets view
-  redirect(`/${params.orgSlug}/tickets`)
+  redirect(`/dashboard/tickets`)
 } 

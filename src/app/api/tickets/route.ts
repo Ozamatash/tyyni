@@ -4,6 +4,9 @@ import { supabase } from '@/utils/supabase/server'
 import type { Database } from '@/types/supabase'
 import { getSupabaseOrgId } from '@/utils/organizations'
 
+type TicketStatus = Database['public']['Enums']['ticket_status']
+type TicketPriority = Database['public']['Enums']['ticket_priority']
+
 export async function POST(req: Request) {
   try {
     const { orgId: clerkOrgId } = await auth()
@@ -71,10 +74,10 @@ export async function POST(req: Request) {
 
 export async function GET(req: Request) {
   try {
-    const { orgId: clerkOrgId } = await auth()
+    const { userId, orgId: clerkOrgId } = await auth()
     
-    if (!clerkOrgId) {
-      return NextResponse.json({ error: 'Organization access required' }, { status: 403 })
+    if (!userId || !clerkOrgId) {
+      return NextResponse.json({ error: 'Authentication and organization access required' }, { status: 401 })
     }
 
     const orgId = await getSupabaseOrgId(clerkOrgId)
@@ -82,8 +85,29 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
     }
 
-    // Get tickets for organization
-    const { data: tickets, error } = await supabase
+    // Get agent profile for user-specific queries
+    const { data: agentProfile } = await supabase
+      .from('agent_profiles')
+      .select('id')
+      .eq('clerk_user_id', userId)
+      .eq('organization_id', orgId)
+      .single()
+
+    if (!agentProfile) {
+      return NextResponse.json({ error: 'Agent profile not found' }, { status: 403 })
+    }
+
+    // Parse query parameters
+    const url = new URL(req.url)
+    const status = url.searchParams.get('status') as TicketStatus | null
+    const priority = url.searchParams.get('priority') as TicketPriority | null
+    const assignedTo = url.searchParams.get('assignedTo')
+    const unassigned = url.searchParams.get('unassigned') === 'true'
+    const myTickets = url.searchParams.get('myTickets') === 'true'
+    const recentlySolved = url.searchParams.get('recentlySolved') === 'true'
+
+    // Start building the query
+    let query = supabase
       .from('tickets')
       .select(`
         *,
@@ -91,7 +115,30 @@ export async function GET(req: Request) {
         assigned_to:agent_profiles(name)
       `)
       .eq('organization_id', orgId)
-      .order('created_at', { ascending: false })
+
+    // Apply filters based on query parameters
+    if (status) {
+      query = query.eq('status', status)
+    }
+    if (priority) {
+      query = query.eq('priority', priority)
+    }
+    if (unassigned) {
+      query = query.is('assigned_to', null)
+    } else if (assignedTo && assignedTo !== 'All') {
+      query = query.eq('assigned_to', assignedTo)
+    }
+    if (myTickets) {
+      query = query.eq('assigned_to', agentProfile.id).eq('status', 'open' as TicketStatus)
+    }
+    if (recentlySolved) {
+      query = query.eq('status', 'solved' as TicketStatus)
+    }
+
+    // Always order by creation date, most recent first
+    query = query.order('created_at', { ascending: false })
+
+    const { data: tickets, error } = await query
 
     if (error) {
       console.error('Error fetching tickets:', error)
