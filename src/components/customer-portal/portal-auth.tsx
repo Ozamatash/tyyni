@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Label } from "@/components/ui/label"
 import { Icons } from "@/components/ui/icons"
 import type { TokenVerificationPayload } from '@/types/customer-portal'
+import { useRouter } from "next/navigation"
 
 interface PortalAuthProps {
   onVerify: (payload: TokenVerificationPayload) => Promise<void>
@@ -17,6 +18,7 @@ interface PortalAuthProps {
 export function PortalAuth({ onVerify, isLoading, error }: PortalAuthProps) {
   const [token, setToken] = useState('')
   const [email, setEmail] = useState('')
+  const router = useRouter()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -25,7 +27,7 @@ export function PortalAuth({ onVerify, isLoading, error }: PortalAuthProps) {
 
   return (
     <div className="bg-white">
-      <div className="relative isolate px-6 pt-14 lg:px-8">
+      <div className="relative isolate px-6 pt-8 lg:px-8">
         <div className="absolute inset-x-0 -top-40 -z-10 transform-gpu overflow-hidden blur-3xl sm:-top-80">
           <div
             className="relative left-[calc(50%-11rem)] aspect-[1155/678] w-[36.125rem] -translate-x-1/2 rotate-[30deg] bg-gradient-to-tr from-[#ff80b5] to-[#9089fc] opacity-30 sm:left-[calc(50%-30rem)] sm:w-[72.1875rem]"
@@ -36,7 +38,7 @@ export function PortalAuth({ onVerify, isLoading, error }: PortalAuthProps) {
           />
         </div>
         
-        <div className="mx-auto max-w-2xl py-32 sm:py-48 lg:py-56">
+        <div className="mx-auto max-w-2xl py-16 sm:py-24 lg:py-32">
           <div className="text-center">
             <h1 className="text-4xl font-bold tracking-tight text-gray-900 sm:text-6xl">
               Customer Support Portal
@@ -86,6 +88,30 @@ export function PortalAuth({ onVerify, isLoading, error }: PortalAuthProps) {
                 Access Portal
               </Button>
             </form>
+
+            <div className="mt-8 max-w-sm mx-auto">
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-gray-300" />
+                </div>
+                <div className="relative flex justify-center text-sm">
+                  <span className="bg-white px-2 text-gray-500">Or</span>
+                </div>
+              </div>
+              
+              <div className="mt-6 text-center">
+                <p className="text-sm text-gray-600 mb-4">
+                  Need to create a new support ticket?
+                </p>
+                <Button
+                  variant="outline"
+                  onClick={() => router.push('/customer-portal/create-ticket')}
+                  className="w-full"
+                >
+                  Create New Ticket
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
 
