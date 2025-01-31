@@ -19,7 +19,7 @@ export async function POST(req: Request) {
 
     // Get base URL from the request
     const url = new URL(req.url)
-    const baseUrl = `${url.protocol}//${url.host}`
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `${url.protocol}//${url.host}`
 
     // Validate input
     if (!email || !name || !subject || !message || !organizationId) {
@@ -191,26 +191,34 @@ export async function POST(req: Request) {
 
     // Send initial access email
     console.log('Sending notification email...')
-    const emailResponse = await fetch(`${baseUrl}/api/customer-portal/send-notification`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        ticketId: ticket.id,
-        email,
-        name,
-        subject,
-        token
+    let emailSent = false
+    try {
+      const emailResponse = await fetch(`${baseUrl}/api/customer-portal/send-notification`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ticketId: ticket.id,
+          email,
+          name,
+          subject,
+          token
+        })
       })
-    })
 
-    if (!emailResponse.ok) {
-      console.error('Email sending error:', await emailResponse.text())
-      return NextResponse.json(
-        { error: 'Failed to send access email' },
-        { status: 500 }
-      )
+      if (!emailResponse.ok) {
+        const errorText = await emailResponse.text()
+        console.error('Email sending error response:', errorText)
+        // Don't return error response, just log it and continue
+        console.warn('Failed to send email notification, but ticket was created successfully')
+      } else {
+        emailSent = true
+      }
+    } catch (emailError) {
+      // Log the error but don't fail the ticket creation
+      console.error('Error sending email notification:', emailError)
+      console.warn('Failed to send email notification, but ticket was created successfully')
     }
 
     console.log('Ticket creation completed successfully')
@@ -218,7 +226,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       success: true,
       token,
-      message: `Your ticket has been created with ${org.name} support team.`
+      message: `Your ticket has been created with ${org.name} support team. ${!emailSent ? 'However, there was an issue sending the email notification.' : ''}`
     })
   } catch (error) {
     // Log the full error details
