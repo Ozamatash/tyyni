@@ -7,7 +7,7 @@ import { useAuth } from "@clerk/nextjs"
 import { useOrganization } from "@clerk/nextjs"
 import { useEffect } from "react"
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/utils"
 import { Button } from "@/components/ui/button"
 import { Sidebar } from "@/components/ui/sidebar"
 import { Skeleton } from "@/components/ui/skeleton"

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/utils/supabase/server'
 import { nanoid } from 'nanoid'
+import { analyzeNewTicket } from '@/services/ai/ticket-processor'
 
 interface CreateTicketRequest {
   email: string
@@ -12,7 +13,9 @@ interface CreateTicketRequest {
 
 export async function POST(req: Request) {
   try {
+    console.log('Starting ticket creation process...')
     const { email, name, subject, message, organizationId }: CreateTicketRequest = await req.json()
+    console.log('Received request data:', { email, name, subject, organizationId })
 
     // Get base URL from the request
     const url = new URL(req.url)
@@ -27,9 +30,10 @@ export async function POST(req: Request) {
     }
 
     // Validate organization exists
+    console.log('Validating organization:', organizationId)
     const { data: org, error: orgError } = await supabase
       .from('organizations')
-      .select('id')
+      .select('id, name')
       .eq('id', organizationId)
       .single()
 
@@ -41,58 +45,79 @@ export async function POST(req: Request) {
       )
     }
 
-    // Check if customer exists
+    // Create or use existing customer
+    console.log('Creating/updating customer for:', email)
     const { data: customer, error: customerError } = await supabase
       .from('customers')
+      .upsert(
+        {
+          email,
+          name,
+          organization_id: organizationId
+        },
+        { onConflict: 'organization_id,email' }
+      )
       .select()
-      .eq('email', email)
-      .eq('organization_id', organizationId)
       .single()
 
-    if (customerError && customerError.code !== 'PGRST116') {
-      console.error('Customer lookup error:', customerError)
+    if (customerError) {
+      console.error('Customer creation error:', customerError)
       return NextResponse.json(
-        { error: 'Error checking customer' },
+        { error: 'Error creating customer' },
         { status: 500 }
       )
     }
 
-    // Create or use existing customer
-    let customerId = customer?.id
-    if (!customerId) {
-      const { data: newCustomer, error: createError } = await supabase
-        .from('customers')
-        .insert({
-          email,
-          name,
-          organization_id: organizationId,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
-        .select()
-        .single()
-
-      if (createError) {
-        console.error('Customer creation error:', createError)
-        return NextResponse.json(
-          { error: 'Error creating customer' },
-          { status: 500 }
-        )
+    // Call AI analysis BEFORE creating the ticket (internal only)
+    console.log('Starting AI analysis...')
+    let analysis
+    try {
+      analysis = await analyzeNewTicket(subject, message, customer.id, organizationId)
+      console.log('AI analysis completed:', analysis)
+    } catch (aiError) {
+      console.error('AI analysis failed:', aiError)
+      // Fallback values if AI fails
+      analysis = {
+        priority: 3,
+        agent_id: '',
+        reason: 'Automatic analysis unavailable'
       }
-      customerId = newCustomer.id
     }
 
-    // Create ticket
+    // Create ticket with AI analysis results (internal fields)
+    console.log('Creating ticket with analysis:', analysis)
+    
+    // Map priority number to string value
+    let priorityString: 'urgent' | 'high' | 'normal' | 'low'
+    if (analysis.priority <= 2) {
+      priorityString = 'urgent'
+    } else if (analysis.priority === 3) {
+      priorityString = 'high'
+    } else if (analysis.priority === 4) {
+      priorityString = 'normal'
+    } else {
+      priorityString = 'low'
+    }
+
     const { data: ticket, error: ticketError } = await supabase
       .from('tickets')
       .insert({
-        customer_id: customerId,
+        customer_id: customer.id,
         subject,
+        organization_id: organizationId,
+        auto_priority: analysis.priority,
+        auto_assigned_agent_id: analysis.agent_id || null,
+        assigned_to: analysis.agent_id || null,
         status: 'open',
-        priority: 'normal',
-        organization_id: organizationId
+        priority: priorityString,
+        metadata: {
+          ai_analysis: {
+            reason: analysis.reason,
+            timestamp: new Date().toISOString()
+          }
+        }
       })
-      .select()
+      .select('id')
       .single()
 
     if (ticketError) {
@@ -104,12 +129,13 @@ export async function POST(req: Request) {
     }
 
     // Create initial message
+    console.log('Creating initial message for ticket:', ticket.id)
     const { error: messageError } = await supabase
       .from('messages')
       .insert({
         ticket_id: ticket.id,
         sender_type: 'customer',
-        sender_id: customerId,
+        sender_id: customer.id,
         content: message,
         organization_id: organizationId,
         is_internal: false
@@ -123,13 +149,33 @@ export async function POST(req: Request) {
       )
     }
 
+    // Update agent workload if assigned (internal operation)
+    if (analysis.agent_id) {
+      try {
+        console.log('Updating agent workload for:', analysis.agent_id)
+        const { error: updateError } = await supabase
+          .rpc('increment_agent_ticket_count', {
+            agent_id: analysis.agent_id
+          })
+
+        if (updateError) {
+          // Log the error but continue with ticket creation
+          console.warn('Non-critical error updating agent ticket count:', updateError)
+        }
+      } catch (workloadError) {
+        // Log the error but continue with ticket creation
+        console.warn('Non-critical error updating agent workload:', workloadError)
+      }
+    }
+
     // Generate and store access token
+    console.log('Generating access token...')
     const token = nanoid(32)
     const { error: tokenError } = await supabase
       .from('customer_access_tokens')
       .insert({
         token,
-        customer_id: customerId,
+        customer_id: customer.id,
         email,
         status: 'active',
         expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
@@ -144,6 +190,7 @@ export async function POST(req: Request) {
     }
 
     // Send initial access email
+    console.log('Sending notification email...')
     const emailResponse = await fetch(`${baseUrl}/api/customer-portal/send-notification`, {
       method: 'POST',
       headers: {
@@ -166,9 +213,20 @@ export async function POST(req: Request) {
       )
     }
 
-    return NextResponse.json({ success: true, token })
+    console.log('Ticket creation completed successfully')
+    // Return only what the customer needs to know
+    return NextResponse.json({
+      success: true,
+      token,
+      message: `Your ticket has been created with ${org.name} support team.`
+    })
   } catch (error) {
-    console.error('Error in create ticket route:', error)
+    // Log the full error details
+    console.error('Detailed error in create ticket route:', {
+      error,
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined
+    })
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

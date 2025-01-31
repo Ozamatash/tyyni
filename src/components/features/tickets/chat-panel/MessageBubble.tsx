@@ -1,7 +1,7 @@
 import { Badge } from "@/components/ui/badge"
 import { Message } from "../types"
 import { format } from "date-fns"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/utils"
 
 interface MessageBubbleProps {
   message: Message

@@ -50,7 +50,8 @@ export async function GET(request: Request, props: { params: Promise<{ ticketId:
       .select(`
         *,
         customer:customers(*),
-        assigned_to:agent_profiles(*),
+        assigned_to:agent_profiles!tickets_assigned_to_fkey(*),
+        auto_assigned_agent:agent_profiles!tickets_auto_assigned_agent_id_fkey(*),
         messages(
           id,
           content,
@@ -109,6 +110,18 @@ export async function PATCH(request: Request, props: { params: Promise<{ ticketI
 
     const body = await request.json()
 
+    // Get current ticket state to check for changes
+    const { data: currentTicket } = await supabase
+      .from('tickets')
+      .select('status, assigned_to')
+      .eq('id', params.ticketId)
+      .eq('organization_id', orgId)
+      .single()
+
+    if (!currentTicket) {
+      return NextResponse.json({ error: 'Ticket not found' }, { status: 404 })
+    }
+
     // Update ticket
     const { data: ticket, error: updateError } = await supabase
       .from('tickets')
@@ -126,6 +139,55 @@ export async function PATCH(request: Request, props: { params: Promise<{ ticketI
     if (updateError) {
       console.error('Error updating ticket:', updateError)
       return NextResponse.json({ error: 'Failed to update ticket' }, { status: 500 })
+    }
+
+    // Handle agent ticket count updates
+    try {
+      // If status changed to solved/closed, decrement the current agent's count
+      if (
+        currentTicket.status !== body.status && 
+        (body.status === 'solved' || body.status === 'closed') &&
+        currentTicket.assigned_to
+      ) {
+        await supabase.rpc('decrement_agent_ticket_count', {
+          agent_id: currentTicket.assigned_to
+        })
+      }
+
+      // If status changed from solved/closed to open/pending, increment the new agent's count
+      if (
+        currentTicket.status !== body.status &&
+        (currentTicket.status === 'solved' || currentTicket.status === 'closed') &&
+        (body.status === 'open' || body.status === 'pending') &&
+        body.assigned_to
+      ) {
+        await supabase.rpc('increment_agent_ticket_count', {
+          agent_id: body.assigned_to
+        })
+      }
+
+      // If assigned agent changed while ticket is open/pending
+      if (
+        currentTicket.assigned_to !== body.assigned_to &&
+        body.status !== 'solved' && 
+        body.status !== 'closed'
+      ) {
+        // Decrement old agent's count if there was one
+        if (currentTicket.assigned_to) {
+          await supabase.rpc('decrement_agent_ticket_count', {
+            agent_id: currentTicket.assigned_to
+          })
+        }
+        // Increment new agent's count if there is one
+        if (body.assigned_to) {
+          await supabase.rpc('increment_agent_ticket_count', {
+            agent_id: body.assigned_to
+          })
+        }
+      }
+    } catch (countError) {
+      // Log but don't fail the request
+      console.warn('Error updating agent ticket counts:', countError)
     }
 
     return NextResponse.json({ ticket })

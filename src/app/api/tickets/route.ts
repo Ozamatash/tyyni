@@ -56,7 +56,8 @@ export async function POST(req: Request) {
       .select(`
         *,
         customer:customers(name, email),
-        assigned_to:agent_profiles(name)
+        assigned_to:agent_profiles!tickets_assigned_to_fkey(name),
+        auto_assigned_agent:agent_profiles!tickets_auto_assigned_agent_id_fkey(name)
       `)
       .single()
 
@@ -112,7 +113,8 @@ export async function GET(req: Request) {
       .select(`
         *,
         customer:customers(name, email),
-        assigned_to:agent_profiles(name)
+        assigned_to:agent_profiles!tickets_assigned_to_fkey(name),
+        auto_assigned_agent:agent_profiles!tickets_auto_assigned_agent_id_fkey(name)
       `)
       .eq('organization_id', orgId)
 

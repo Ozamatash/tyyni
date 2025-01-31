@@ -7,38 +7,15 @@ export type Json =
   | Json[]
 
 export type Database = {
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          operationName?: string
-          query?: string
-          variables?: Json
-          extensions?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
   public: {
     Tables: {
       agent_profiles: {
         Row: {
           clerk_user_id: string
           created_at: string | null
+          current_open_tickets: number | null
           email: string
+          expertise_tags: string[] | null
           id: string
           name: string
           organization_id: string
@@ -50,7 +27,9 @@ export type Database = {
         Insert: {
           clerk_user_id: string
           created_at?: string | null
+          current_open_tickets?: number | null
           email: string
+          expertise_tags?: string[] | null
           id?: string
           name: string
           organization_id: string
@@ -62,7 +41,9 @@ export type Database = {
         Update: {
           clerk_user_id?: string
           created_at?: string | null
+          current_open_tickets?: number | null
           email?: string
+          expertise_tags?: string[] | null
           id?: string
           name?: string
           organization_id?: string
@@ -429,6 +410,8 @@ export type Database = {
       tickets: {
         Row: {
           assigned_to: string | null
+          auto_assigned_agent_id: string | null
+          auto_priority: number | null
           created_at: string | null
           customer_id: string
           id: string
@@ -442,6 +425,8 @@ export type Database = {
         }
         Insert: {
           assigned_to?: string | null
+          auto_assigned_agent_id?: string | null
+          auto_priority?: number | null
           created_at?: string | null
           customer_id: string
           id?: string
@@ -455,6 +440,8 @@ export type Database = {
         }
         Update: {
           assigned_to?: string | null
+          auto_assigned_agent_id?: string | null
+          auto_priority?: number | null
           created_at?: string | null
           customer_id?: string
           id?: string
@@ -470,6 +457,13 @@ export type Database = {
           {
             foreignKeyName: "tickets_assigned_to_fkey"
             columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "agent_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tickets_auto_assigned_agent_id_fkey"
+            columns: ["auto_assigned_agent_id"]
             isOneToOne: false
             referencedRelation: "agent_profiles"
             referencedColumns: ["id"]
@@ -499,11 +493,23 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: string
       }
+      decrement_agent_ticket_count: {
+        Args: {
+          agent_id: string
+        }
+        Returns: number
+      }
       generate_unique_slug: {
         Args: {
           name_input: string
         }
         Returns: string
+      }
+      increment_agent_ticket_count: {
+        Args: {
+          agent_id: string
+        }
+        Returns: number
       }
       requesting_user_id: {
         Args: Record<PropertyKey, never>

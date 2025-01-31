@@ -146,6 +146,17 @@ export async function POST(request: Request, props: { params: Promise<{ ticketId
       return NextResponse.json({ error: 'Message content required' }, { status: 400 })
     }
 
+    // Get current ticket status
+    const { data: currentTicket } = await supabase
+      .from('tickets')
+      .select('status, assigned_to')
+      .eq('id', ticketId)
+      .single()
+
+    if (!currentTicket) {
+      return NextResponse.json({ error: 'Failed to get ticket status' }, { status: 500 })
+    }
+
     // Create message
     const messageData: Database['public']['Tables']['messages']['Insert'] = {
       ticket_id: ticketId,
@@ -179,7 +190,21 @@ export async function POST(request: Request, props: { params: Promise<{ ticketId
       sender
     }
 
-    // Update ticket activity
+    // Update ticket activity and status
+    // If ticket was solved/closed and has an assigned agent, increment their count when reopening
+    if (
+      (currentTicket.status === 'solved' || currentTicket.status === 'closed') &&
+      currentTicket.assigned_to
+    ) {
+      try {
+        await supabase.rpc('increment_agent_ticket_count', {
+          agent_id: currentTicket.assigned_to
+        })
+      } catch (countError) {
+        console.warn('Error incrementing agent ticket count:', countError)
+      }
+    }
+
     const { error: updateError } = await supabase
       .from('tickets')
       .update({ 

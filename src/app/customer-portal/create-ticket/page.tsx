@@ -15,9 +15,15 @@ type Organization = {
   support_email: string
 }
 
+type CreateTicketResponse = {
+  success: boolean
+  token: string
+  message: string
+}
+
 export default function CreateTicketPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [result, setResult] = useState<{ token?: string, error?: string } | null>(null)
+  const [result, setResult] = useState<{ token?: string, message?: string, error?: string } | null>(null)
   const [organizations, setOrganizations] = useState<Organization[]>([])
   const [selectedOrg, setSelectedOrg] = useState<string>("")
   const [error, setError] = useState<string>("")
@@ -85,7 +91,10 @@ export default function CreateTicketPage() {
         throw new Error(data.error || 'Failed to create ticket')
       }
 
-      setResult({ token: data.token })
+      setResult({ 
+        token: data.token,
+        message: data.message
+      })
     } catch (error) {
       console.error('Error creating ticket:', error)
       setResult({ error: error instanceof Error ? error.message : 'Failed to create ticket. Please try again.' })
@@ -171,7 +180,8 @@ export default function CreateTicketPage() {
               <CheckIcon className="h-4 w-4 text-green-600" />
               <AlertTitle className="text-green-800">Ticket Created Successfully!</AlertTitle>
               <AlertDescription className="text-green-700">
-                Your support ticket has been created. Save the access token and URL below to access your ticket later.
+                {result.message}
+                <p className="mt-2">Save the access token and URL below to access your ticket later.</p>
               </AlertDescription>
             </Alert>
 
